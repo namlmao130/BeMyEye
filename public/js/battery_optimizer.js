@@ -23,8 +23,9 @@ class BatteryThermalOptimizer {
     this.consecutiveStaticFrames = 0;
 
     // Giới hạn FPS mục tiêu
-    this.targetFPS = 20;
-    this.minFrameIntervalMs = 1000 / 20; // 50ms giữa các frame
+    this.targetFPS = 30;
+    this.minFrameIntervalMs = 0; // Mặc định không giới hạn FPS
+    this.highPerformanceMode = true; // Chế độ tối đa hiệu năng mặc định
     this.lastExecutionTime = 0;
 
     this.initBatteryMonitoring();
@@ -86,11 +87,25 @@ class BatteryThermalOptimizer {
    * @returns {boolean} true nếu cần xử lý, false nếu nên bỏ qua
    */
   shouldProcessFrame(currentTimeMs) {
+    if (this.highPerformanceMode) {
+      return true; // Không giới hạn FPS ở chế độ hiệu năng cao
+    }
     if (currentTimeMs - this.lastExecutionTime >= this.minFrameIntervalMs) {
       this.lastExecutionTime = currentTimeMs;
       return true;
     }
     return false;
+  }
+
+  setHighPerformance(enable) {
+    this.highPerformanceMode = enable;
+    if (enable) {
+      this.minFrameIntervalMs = 0;
+      this.targetFPS = 30;
+    } else {
+      this.minFrameIntervalMs = 50;
+      this.targetFPS = 20;
+    }
   }
 
   getStatus() {

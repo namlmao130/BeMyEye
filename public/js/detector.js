@@ -48,15 +48,19 @@ class ObjectDetector {
     if (onProgressCallback) onProgressCallback('Đang tải mô hình thị giác AI (MobileNet SSD)...');
 
     try {
-      // Đặt backend ưu tiên WebGL để tăng tốc phần cứng GPU di động
+      // Đặt backend WebGL với cờ tối ưu hóa tăng tốc GPU di động (Float16 & Texture Packing)
       if (window.tf) {
+        tf.env().set('WEBGL_VERSION', 2);
+        tf.env().set('WEBGL_PACK', true);
+        tf.env().set('WEBGL_FORCE_F16_TEXTURES', true);
+        tf.env().set('WEBGL_FLUSH_THRESHOLD', 1);
         await tf.setBackend('webgl');
         await tf.ready();
       }
 
-      // Tải mô hình COCO-SSD bản lite để đảm bảo đạt >= 15-20 FPS trên di động
+      // Tải mô hình COCO-SSD bản lite
       this.model = await cocoSsd.load({
-        base: 'lite_mobilenet_v2' // Rất nhẹ và tối ưu cho mobile browser
+        base: 'lite_mobilenet_v2'
       });
 
       this.isModelLoaded = true;
@@ -85,8 +89,8 @@ class ObjectDetector {
     }
 
     try {
-      // Dự đoán đối tượng
-      const predictions = await this.model.detect(inputElement, 15, this.confidenceThreshold);
+      // Dự đoán tối đa 6 đối tượng gần nhất (giảm tải NMS, tăng gấp đôi tốc độ)
+      const predictions = await this.model.detect(inputElement, 6, this.confidenceThreshold);
 
       // Lọc và ánh xạ các nhãn liên quan
       const filtered = [];

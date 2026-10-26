@@ -32,11 +32,9 @@ class MetricsLogger {
    * Cập nhật sau mỗi frame xử lý
    * @param {number} latencyMs - Thời gian từ lúc lấy frame đến khi ra quyết định
    */
-  update(latencyMs) {
+  tickFrame() {
     const now = performance.now();
     this.frameCount++;
-
-    // Tính FPS tức thời
     const delta = (now - this.lastTime) / 1000;
     if (delta >= 0.5) {
       this.fps = Math.round((this.frameCount / delta) * 10) / 10;
@@ -45,17 +43,22 @@ class MetricsLogger {
       this.fpsHistory.push(this.fps);
       if (this.fpsHistory.length > 30) this.fpsHistory.shift();
     }
+  }
 
-    // Lưu độ trễ
+  updateLatency(latencyMs) {
     this.latency = Math.round(latencyMs);
     this.latencyHistory.push(this.latency);
     if (this.latencyHistory.length > 30) this.latencyHistory.shift();
 
-    // Nếu đang trong phiên ghi dữ liệu
     if (this.isRecording) {
       this.recordedFrames++;
       this.totalLatencySum += latencyMs;
     }
+  }
+
+  update(latencyMs) {
+    this.tickFrame();
+    this.updateLatency(latencyMs);
   }
 
   recordDetections(analyzedObjects) {

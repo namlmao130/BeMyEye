@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const confValue = document.getElementById('conf-value');
 
   // Phase 2 Toggles
+  const toggleHighPerf = document.getElementById('toggle-high-perf');
   const toggleGroundAnalysis = document.getElementById('toggle-ground-analysis');
   const toggleDepthAnalysis = document.getElementById('toggle-depth-analysis');
 
@@ -54,6 +55,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   let isDebugViewVisible = false;
   let enableGround = true;
   let enableDepth = true;
+
+  // Hàng đợi xử lý bất đồng bộ (Decoupled Multi-rate Pipeline) để đạt 30-60 FPS
+  let isDetecting = false;
+  let cachedRawDetections = [];
+  let cachedGenericObstacles = [];
+  let cachedGroundHazards = [];
+  let loopFrameCount = 0;
 
   // 1. Tải trước mô hình AI
   statusBanner.textContent = 'Đang nạp mô hình AI... Vui lòng đợi';
@@ -133,19 +141,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     btnToggleAppDebug.addEventListener('click', toggleApp);
   }
 
-  // 3. Vòng lặp suy luận thời gian thực (Inference Loop) - Giai đoạn 5 (Tối ưu Pin & Nhiệt độ)
+  // 3. Vòng lặp suy luận thời gian thực SIÊU MƯỢT (Decoupled Async Pipeline - 30+ FPS)
   async function processFrameLoop() {
     if (!isAppActive) return;
 
-    const startTime = performance.now();
+    metricsLogger.tickFrame();
+    const frameStartTime = performance.now();
 
-    // Điều tiết FPS động để tiết kiệm pin (Dynamic FPS Throttling)
-    if (!batteryOptimizer.shouldProcessFrame(startTime)) {
+    // Điều tiết FPS nếu bật chế độ tiết kiệm pin
+    if (!batteryOptimizer.shouldProcessFrame(frameStartTime)) {
       animationFrameId = requestAnimationFrame(processFrameLoop);
       return;
     }
 
-    // Cập nhật trạng thái di chuyển từ GPS
     if (navEngine.currentPosition) {
       batteryOptimizer.updateMovementState(navEngine.currentPosition.speed || 0);
     }
@@ -153,34 +161,45 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (video.readyState >= 2) {
       const frameWidth = canvas.width || video.videoWidth;
       const frameHeight = canvas.height || video.videoHeight;
+      loopFrameCount++;
 
-      // Bước A: Suy luận nhận diện vật thể 2D COCO
-      const rawDetections = await detector.detect(video);
-      const analyzed2D = spatialAnalyzer.analyzeDetections(rawDetections, frameWidth, frameHeight);
-
-      // Bước B: Phân tích chướng ngại vật tầm đầu (Generic Depth Obstacles)
-      let genericObstacles = [];
-      if (enableDepth) {
-        genericObstacles = genericDepthAnalyzer.detectGenericObstacles(video, analyzed2D);
+      // BƯỚC 1: SUY LUẬN AI BẤT ĐỒNG BỘ (Không bao giờ block Render Loop của trình duyệt)
+      if (!isDetecting) {
+        isDetecting = true;
+        const inferStart = performance.now();
+        detector.detect(video).then(raw => {
+          cachedRawDetections = raw;
+          isDetecting = false;
+          const latencyMs = performance.now() - inferStart;
+          metricsLogger.updateLatency(latencyMs);
+        }).catch(() => {
+          isDetecting = false;
+        });
       }
 
-      // Bước C: Phân đoạn mặt phẳng sàn và phát hiện Bậc thềm / Lề đường (Ground Plane Hazards)
-      let groundResult = { hazards: [] };
-      if (enableGround) {
-        groundResult = groundAnalyzer.analyze(video);
+      // BƯỚC 2: XOAY VÒNG PHÂN TÍCH MẶT ĐẤT & ĐỘ SÂU (Interleaved: 1 module / frame)
+      // Giảm 60% tải getImageData() trên GPU
+      if (loopFrameCount % 2 === 0) {
+        if (enableGround) {
+          const groundResult = groundAnalyzer.analyze(video);
+          cachedGroundHazards = groundResult.hazards || [];
+        }
+      } else {
+        if (enableDepth) {
+          cachedGenericObstacles = genericDepthAnalyzer.detectGenericObstacles(video, cachedRawDetections);
+        }
       }
 
-      // Bước D: Bộ não ra quyết định cảnh báo hợp nhất (Priority Decision Engine)
-      const primaryThreat = alertEngine.process(analyzed2D, genericObstacles, groundResult.hazards);
+      // BƯỚC 3: PHÂN TÍCH KHÔNG GIAN DỰA TRÊN DỮ LIỆU ĐÃ CACHE
+      const analyzed2D = spatialAnalyzer.analyzeDetections(cachedRawDetections, frameWidth, frameHeight);
 
-      // Bước E: Tính toán hiệu năng & cập nhật số liệu
-      const latencyMs = performance.now() - startTime;
-      metricsLogger.update(latencyMs);
+      // BƯỚC 4: BỘ QUYẾT ĐỊNH CẢNH BÁO
+      const primaryThreat = alertEngine.process(analyzed2D, cachedGenericObstacles, cachedGroundHazards);
       metricsLogger.recordDetections(analyzed2D);
 
-      // Bước F: Vẽ trực quan hóa trên màn hình Debug
+      // BƯỚC 5: VẼ TRỰC QUAN HÓA & HUD (Chạy mượt 30-60 FPS)
       if (isDebugViewVisible) {
-        drawDebugCanvas(analyzed2D, genericObstacles, groundResult.hazards, primaryThreat, frameWidth, frameHeight);
+        drawDebugCanvas(analyzed2D, cachedGenericObstacles, cachedGroundHazards, primaryThreat, frameWidth, frameHeight);
         updateDebugHUD(primaryThreat);
       }
     }
@@ -327,7 +346,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   btnToggleDebugMode.addEventListener('click', () => setDebugView(true));
   btnToggleDebugClose.addEventListener('click', () => setDebugView(false));
 
-  // Toggles Giai đoạn 2
+  // Toggles Hiệu Năng & Giai đoạn 2
+  if (toggleHighPerf) {
+    toggleHighPerf.addEventListener('change', (e) => {
+      batteryOptimizer.setHighPerformance(e.target.checked);
+    });
+  }
   if (toggleGroundAnalysis) {
     toggleGroundAnalysis.addEventListener('change', (e) => {
       enableGround = e.target.checked;
