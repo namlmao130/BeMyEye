@@ -26,18 +26,33 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Scaffold Android platform files if needed
+      - name: Configure Android platform files
         working-directory: flutter_app
         run: |
+          # 1. Tái sinh toàn bộ cấu trúc Android và Gradle Wrapper chuẩn Flutter 3.22
+          rm -rf android
           flutter create . --org com.bemyeye --project-name be_my_eye_vn --platforms=android
+          
+          # 2. Đặt minSdk = 21 (Bắt buộc cho Camera & Geolocator)
+          find android/ -name "build.gradle" -exec sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/g' {} +
+          find android/ -name "build.gradle" -exec sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' {} +
+          
+          # 3. Thêm aaptOptions noCompress cho tflite
+          sed -i '/buildTypes {/i \    aaptOptions { noCompress "tflite"; noCompress "lite" }' android/app/build.gradle
+          
+          # 4. Thêm quyền Camera, GPS, Rung vào AndroidManifest.xml
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.VIBRATE" />' android/app/src/main/AndroidManifest.xml
+          
+          # 5. Tải dependencies
           flutter pub get
 
       - name: Build Android APK Release
         working-directory: flutter_app
-        run: flutter build apk --release --no-tree-shake-icons
+        run: |
+          flutter build apk --release --no-tree-shake-icons
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: BeMyEyes-VN-Release-APK
-          path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+          path: flutter_app/build/app/outputs/**/app-release.apk
