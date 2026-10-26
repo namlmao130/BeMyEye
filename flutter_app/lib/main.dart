@@ -51,11 +51,6 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
     _batteryOptimizer = BatteryThermalOptimizer();
 
     _detectorService.loadModel();
-
-    // Kiểm tra Điều khoản an toàn bắt buộc khi khởi chạy
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      SafetyDisclaimerDialog.checkAndShow(context, _audioService);
-    });
   }
 
   void _toggleApp() {

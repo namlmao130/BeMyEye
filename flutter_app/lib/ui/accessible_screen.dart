@@ -31,6 +31,14 @@ class AccessibleScreen extends StatefulWidget {
 
 class _AccessibleScreenState extends State<AccessibleScreen> {
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      SafetyDisclaimerDialog.checkAndShow(context, widget.audio);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF000000), // OLED Pure Black tiết kiệm pin
