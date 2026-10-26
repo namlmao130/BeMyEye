@@ -26,13 +26,15 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Install dependencies
+      - name: Scaffold Android platform files if needed
         working-directory: flutter_app
-        run: flutter pub get
+        run: |
+          flutter create . --org com.bemyeye --project-name be_my_eye_vn --platforms=android
+          flutter pub get
 
       - name: Build Android APK Release
         working-directory: flutter_app
-        run: flutter build apk --release
+        run: flutter build apk --release --no-tree-shake-icons
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
