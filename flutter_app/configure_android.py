@@ -33,6 +33,12 @@ def configure():
         with open(build_gradle_path, "r", encoding="utf-8") as f:
             content = f.read()
 
+        # Set compileSdk / targetSdk to 36 (Mandatory for flutter_tts & audioplayers)
+        content = re.sub(r'compileSdk\s*=\s*\S+', 'compileSdk = 36', content)
+        content = re.sub(r'compileSdkVersion\s*\S+', 'compileSdkVersion 36', content)
+        content = re.sub(r'targetSdk\s*=\s*\S+', 'targetSdk = 36', content)
+        content = re.sub(r'targetSdkVersion\s*\S+', 'targetSdkVersion 36', content)
+
         # Set minSdk / minSdkVersion to 26 (Mandatory for tflite_flutter & modern Android)
         content = re.sub(r'minSdk\s*=\s*\S+', 'minSdk = 26', content)
         content = re.sub(r'minSdkVersion\s*\S+', 'minSdkVersion 26', content)
@@ -63,7 +69,7 @@ def configure():
 
         with open(build_gradle_path, "w", encoding="utf-8") as f:
             f.write(content)
-        print("  ✓ Updated android/app/build.gradle (minSdk=26, aaptOptions, minifyEnabled=false)")
+        print("  ✓ Updated android/app/build.gradle (compileSdk=36, targetSdk=36, minSdk=26, aaptOptions, minifyEnabled=false)")
     else:
         print("  ! android/app/build.gradle not found!")
 
