@@ -55,7 +55,7 @@ jobs:
         working-directory: flutter_app
         run: |
           set -o pipefail
-          flutter build apk --release --no-tree-shake-icons --no-shrink 2>&1 | tee build_apk.log
+          flutter build apk --release --no-tree-shake-icons 2>&1 | tee build_apk.log
 
       - name: Save Error Log on Failure
         if: failure()

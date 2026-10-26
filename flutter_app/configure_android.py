@@ -2,7 +2,17 @@
 import os
 import re
 
-PROGUARD_RULES = """# TensorFlow Lite & tflite_flutter specific rules
+PROGUARD_RULES = """# Suppress all missing class warnings from R8 / ProGuard
+-ignorewarnings
+-dontwarn **
+
+# Google Play Core & Play Store Split / Deferred Components
+-dontwarn com.google.android.play.**
+-dontwarn com.google.android.play.core.**
+-keep class com.google.android.play.core.splitcompat.** { *; }
+-keep class com.google.android.play.core.splitinstall.** { *; }
+
+# TensorFlow Lite & tflite_flutter specific rules
 -keep class org.tensorflow.lite.** { *; }
 -keep class com.google.android.gms.tflite.** { *; }
 -dontwarn org.tensorflow.lite.**
@@ -61,35 +71,39 @@ def configure():
             else:
                 content = content.replace("android {", "android {\n" + aapt_block, 1)
 
-        # Configure release build to use debug signing and disable aggressive shrinking
+        # Configure release build to use debug signing and link proguard-rules.pro
         release_block = """    buildTypes {
         release {
             signingConfig signingConfigs.debug
             minifyEnabled false
             shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }"""
         if "buildTypes {" in content:
-            content = re.sub(r'buildTypes\s*\{[^}]*release\s*\{[^}]*\}[^}]*\}', release_block, content, flags=re.DOTALL)
+            content = re.sub(r'buildTypes\s*\{.*?\n    \}', release_block, content, flags=re.DOTALL)
+            if "proguardFiles" not in content:
+                content = content.replace("buildTypes {", release_block + "\n    /* original: buildTypes */", 1)
 
         with open(build_gradle_path, "w", encoding="utf-8") as f:
             f.write(content)
-        print("  ✓ Updated android/app/build.gradle (compileSdk=36, targetSdk=36, minSdk=26, Java/Kotlin=17, aaptOptions, minifyEnabled=false)")
+        print("  ✓ Updated android/app/build.gradle (compileSdk=36, targetSdk=36, minSdk=26, Java/Kotlin=17, aaptOptions, proguardFiles)")
     else:
         print("  ! android/app/build.gradle not found!")
 
-    # 2. Update root android/build.gradle to force Java 17 on all subprojects (tflite_flutter, etc.)
+    # 2. Update root android/build.gradle to force Java 17 and compileSdkVersion 36 on all subprojects (tflite_flutter, etc.)
     root_gradle_path = os.path.join(android_dir, "build.gradle")
     if os.path.exists(root_gradle_path):
         with open(root_gradle_path, "r", encoding="utf-8") as f:
             root_content = f.read()
 
         subprojects_block = """
-// Force Java 17 across all plugins and subprojects
+// Force Java 17 and compileSdkVersion 36 across all plugins and subprojects
 subprojects {
     afterEvaluate { project ->
         if (project.hasProperty('android')) {
             project.android {
+                compileSdkVersion 36
                 compileOptions {
                     sourceCompatibility JavaVersion.VERSION_17
                     targetCompatibility JavaVersion.VERSION_17
@@ -144,9 +158,16 @@ subprojects {
 
     # 5. Update gradle.properties
     props_path = os.path.join(android_dir, "gradle.properties")
-    with open(props_path, "a", encoding="utf-8") as f:
-        f.write("\norg.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=2G\nandroid.useAndroidX=true\nandroid.enableJetifier=true\nkotlin.jvm.target.validation.mode=warning\nandroid.suppressUnsupportedCompileSdk=36\nandroid.uniquePackageNames=false\n")
-    print("  ✓ Updated android/gradle.properties (JVM args 4G, uniquePackageNames=false)")
+    props_content = ""
+    if os.path.exists(props_path):
+        with open(props_path, "r", encoding="utf-8") as f:
+            props_content = f.read()
+    if "uniquePackageNames" not in props_content:
+        with open(props_path, "a", encoding="utf-8") as f:
+            f.write("\norg.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=2G\nandroid.useAndroidX=true\nandroid.enableJetifier=true\nkotlin.jvm.target.validation.mode=warning\nandroid.suppressUnsupportedCompileSdk=36\nandroid.uniquePackageNames=false\n")
+        print("  ✓ Updated android/gradle.properties (JVM args 4G, uniquePackageNames=false)")
+    else:
+        print("  ✓ android/gradle.properties already configured")
 
     print(">>> [configure_android.py] Android configuration complete!")
 

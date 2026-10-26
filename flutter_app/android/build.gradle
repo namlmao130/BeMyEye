@@ -17,12 +17,12 @@ tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
 
-
-// Force Java 17 across all plugins and subprojects
+// Force Java 17 and compileSdkVersion 36 across all plugins and subprojects
 subprojects {
     afterEvaluate { project ->
         if (project.hasProperty('android')) {
             project.android {
+                compileSdkVersion 36
                 compileOptions {
                     sourceCompatibility JavaVersion.VERSION_17
                     targetCompatibility JavaVersion.VERSION_17

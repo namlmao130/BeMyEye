@@ -1,3 +1,13 @@
+# Suppress all missing class warnings from R8 / ProGuard
+-ignorewarnings
+-dontwarn **
+
+# Google Play Core & Play Store Split / Deferred Components
+-dontwarn com.google.android.play.**
+-dontwarn com.google.android.play.core.**
+-keep class com.google.android.play.core.splitcompat.** { *; }
+-keep class com.google.android.play.core.splitinstall.** { *; }
+
 # TensorFlow Lite & tflite_flutter specific rules
 -keep class org.tensorflow.lite.** { *; }
 -keep class com.google.android.gms.tflite.** { *; }
