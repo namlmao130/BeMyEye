@@ -45,7 +45,7 @@ jobs:
       - name: Flutter Analyze (Code Quality Check)
         working-directory: flutter_app
         run: |
-          flutter analyze || true
+          flutter analyze
 
       - name: Build Android APK Release
         working-directory: flutter_app

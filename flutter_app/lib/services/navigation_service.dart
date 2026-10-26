@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import '../models/waypoint.dart';
+import '../models/detection_result.dart';
 import 'audio_haptics_service.dart';
 import 'alert_decision_engine.dart';
 

@@ -14,7 +14,7 @@ dependencies:
   camera: ^0.11.0+2
 
   # Suy luận mô hình AI On-device (TFLite với GPU/NNAPI/CoreML Delegates)
-  tflite_flutter: ^0.10.4
+  tflite_flutter: ^0.11.0
 
   # Giọng nói tiếng Việt ngắn gọn (Text-to-Speech)
   flutter_tts: ^4.2.2
