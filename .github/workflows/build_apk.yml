@@ -32,7 +32,11 @@ jobs:
       - name: Configure Android platform
         working-directory: flutter_app
         run: |
-          # 1. Tái sinh toàn bộ cấu trúc Android & Gradle Wrapper chuẩn Flutter 3.22
+          # 0. Global gradle properties (allow non-unique package names across legacy AARs)
+          mkdir -p ~/.gradle
+          echo "android.uniquePackageNames=false" >> ~/.gradle/gradle.properties
+          
+          # 1. Tái sinh toàn bộ cấu trúc Android & Gradle Wrapper chuẩn Flutter
           rm -rf android
           flutter create . --org com.bemyeye --project-name be_my_eye_vn --platforms=android
           
