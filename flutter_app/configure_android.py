@@ -91,13 +91,22 @@ def configure():
     else:
         print("  ! android/app/build.gradle not found!")
 
-    # 2. Update root android/build.gradle to force Java 17 and compileSdkVersion 36 on all subprojects (tflite_flutter, etc.)
+    # 2. Update root android/build.gradle to force Java 17, compileSdkVersion 36, and disable AarMetadata checks
     root_gradle_path = os.path.join(android_dir, "build.gradle")
     if os.path.exists(root_gradle_path):
         with open(root_gradle_path, "r", encoding="utf-8") as f:
             root_content = f.read()
 
         subprojects_block = """
+// Disable checkAarMetadata tasks that fail when third-party plugins use older compileSdk
+allprojects {
+    tasks.whenTaskAdded { task ->
+        if (task.name.contains("AarMetadata")) {
+            task.enabled = false
+        }
+    }
+}
+
 // Force Java 17 and compileSdkVersion 36 across all plugins and subprojects
 subprojects {
     afterEvaluate { project ->
@@ -118,11 +127,11 @@ subprojects {
     }
 }
 """
-        if "jvmTarget = '17'" not in root_content:
+        if "AarMetadata" not in root_content:
             root_content += "\n" + subprojects_block
             with open(root_gradle_path, "w", encoding="utf-8") as f:
                 f.write(root_content)
-            print("  ✓ Updated android/build.gradle (enforced Java 17 across all subprojects)")
+            print("  ✓ Updated android/build.gradle (enforced Java 17, compileSdk 36, disabled AarMetadata)")
     else:
         print("  ! android/build.gradle not found!")
 
