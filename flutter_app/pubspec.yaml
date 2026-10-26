@@ -1,0 +1,51 @@
+name: be_my_eye_vn
+description: "Trợ lý thị giác dẫn đường thời gian thực on-device cho người khiếm thị tại Việt Nam"
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Camera & Xử lý khung hình thời gian thực
+  camera: ^0.11.0+2
+
+  # Suy luận mô hình AI On-device (TFLite với GPU/NNAPI/CoreML Delegates)
+  tflite_flutter: ^0.10.4
+
+  # Giọng nói tiếng Việt ngắn gọn (Text-to-Speech)
+  flutter_tts: ^4.2.2
+
+  # Âm thanh định hướng Stereo Pan & Cao độ (Pitch)
+  audioplayers: ^6.1.0
+
+  # Rung xúc giác (Haptics Feedback & Heartbeat Pulse)
+  vibration: ^2.0.1
+
+  # Định vị GPS độ chính xác cao & Bộ lọc làm mượt
+  geolocator: ^13.0.2
+
+  # La bàn số (Digital Compass Heading)
+  flutter_compass: ^0.8.0
+
+  # Lưu trữ cài đặt & trạng thái chấp thuận điều khoản
+  shared_preferences: ^2.3.3
+
+  # Quản lý quyền truy cập hệ thống (Camera, Vị trí, Micro)
+  permission_handler: ^11.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+
+  # Cấu hình tài nguyên âm thanh & mô hình AI offline
+  assets:
+    - assets/models/
+    - assets/sounds/

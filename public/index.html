@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Be My Eyes VN - Trợ lý dẫn đường thời gian thực</title>
+  <meta name="description" content="Trợ lý thị giác dẫn đường thời gian thực on-device cho người khiếm thị trên đường phố Việt Nam">
+  <meta name="theme-color" content="#121212">
+  <link rel="stylesheet" href="styles.css">
+  
+  <!-- Cấu hình PWA cài đặt làm App trên điện thoại -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="BeMyEyes">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+  <!-- Đăng ký Service Worker -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(console.warn);
+      });
+    }
+  </script>
+  
+  <!-- TensorFlow.js & COCO-SSD từ CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+</head>
+<body>
+
+  <!-- Thanh trạng thái đọc bằng VoiceOver / TalkBack -->
+  <div id="status-banner" class="status-bar" role="status" aria-live="polite">
+    Đang tải ứng dụng...
+  </div>
+
+  <!-- ====================================================
+       CHẾ ĐỘ DÀNH CHO NGƯỜI KHIẾM THỊ (ACCESSIBLE VIEW)
+       ==================================================== -->
+  <main id="accessible-view" class="accessible-container" role="main">
+    <div class="accessible-instructions">
+      <p>Ứng dụng cảnh báo vật cản, bậc thềm và lề đường bằng âm thanh định hướng.</p>
+      <p style="margin-top: 6px; font-size: 0.95rem; color: #facc15;">
+        * Lưu ý: Không thay thế gậy trắng. Khuyến khích đeo tai nghe truyền xương hoặc loa ngoài.
+      </p>
+    </div>
+
+    <!-- Nút bấm khổng lồ trung tâm -->
+    <button id="btn-toggle-app" class="btn-massive" aria-label="Bắt đầu dẫn đường thời gian thực" role="button">
+      BẮT ĐẦU DẪN ĐƯỜNG
+    </button>
+
+    <!-- Nút mở chế độ kỹ thuật -->
+    <button id="btn-toggle-debug" class="btn-debug-open" aria-label="Mở màn hình kỹ thuật và đo đạc">
+      🛠️ Màn hình Kỹ thuật & Đo đạc
+    </button>
+
+    <!-- Nút xem lại điều khoản an toàn -->
+    <button id="btn-reopen-disclaimer" class="btn-disclaimer-reopen" aria-label="Xem lại điều khoản an toàn và giới hạn kỹ thuật">
+      📜 Điều khoản an toàn & Giới hạn kỹ thuật
+    </button>
+  </main>
+
+  <!-- ====================================================
+       MODAL ĐIỀU KHOẢN AN TOÀN BẮT BUỘC (SAFETY DISCLAIMER)
+       ==================================================== -->
+  <div id="safety-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="disclaimer-title" style="display: none;">
+    <div class="modal-content">
+      <h2 id="disclaimer-title">ĐIỀU KHOẢN AN TOÀN BẮT BUỘC</h2>
+      <ul class="disclaimer-list">
+        <li><strong>Không thay thế gậy trắng:</strong> Ứng dụng chỉ là công cụ bổ trợ tầm xa và tầm cao. Bạn <em>bắt buộc</em> phải dùng gậy trắng để dò mặt đất và gờ vỉa hè.</li>
+        <li><strong>Không bao giờ che tai:</strong> Bắt buộc dùng tai nghe truyền xương, tai nghe hở (open-ear) hoặc loa ngoài. Tuyệt đối không che kín tai để nghe tiếng xe thật phía sau.</li>
+        <li><strong>Giới hạn kỹ thuật:</strong> Camera điện thoại không thể đảm bảo 100% trong việc phát hiện hố ga mất nắp, rãnh cống, dây điện mảnh hoặc vật thể khi ngược sáng gắt.</li>
+        <li><strong>Ứng dụng không bao giờ nói "Đường an toàn":</strong> App im lặng chỉ có nghĩa cảm biến chưa phát hiện thấy vật cản, không cam kết đường hoàn toàn thông thoáng.</li>
+      </ul>
+      <button id="btn-agree-disclaimer" class="btn-agree" aria-label="Tôi đã hiểu rõ và đồng ý với điều khoản an toàn">
+        TÔI HIỂU RÕ VÀ ĐỒNG Ý
+      </button>
+    </div>
+  </div>
+
+  <!-- ====================================================
+       CHẾ ĐỘ DEBUG DÀNH CHO NHÀ PHÁT TRIỂN (DEVELOPER HUD)
+       ==================================================== -->
+  <section id="debug-panel" class="debug-container" aria-label="Màn hình kỹ thuật">
+    <div class="debug-header">
+      <h2>Màn hình Kỹ thuật & Đo lường</h2>
+      <button id="btn-toggle-debug-close" class="btn-close-debug">Đóng Debug</button>
+    </div>
+
+    <!-- Viewport Camera + Bounding Boxes -->
+    <div class="viewport-wrapper">
+      <video id="camera-feed" playsinline muted autoplay></video>
+      <canvas id="debug-canvas"></canvas>
+    </div>
+
+    <!-- Bảng thông số thời gian thực -->
+    <div class="hud-grid">
+      <div class="hud-card">
+        <div class="lbl">FPS</div>
+        <div id="fps-val" class="val">--</div>
+      </div>
+      <div class="hud-card">
+        <div class="lbl">Độ trễ</div>
+        <div id="latency-val" class="val">-- ms</div>
+      </div>
+      <div class="hud-card">
+        <div class="lbl">Mối nguy</div>
+        <div id="threat-val" class="val safe">--</div>
+      </div>
+      <div class="hud-card">
+        <div class="lbl">Hướng</div>
+        <div id="direction-val" class="val">--</div>
+      </div>
+    </div>
+
+    <!-- Điều khiển Module Giai đoạn 2 (Độ sâu & Mặt phẳng sàn) -->
+    <div class="control-card">
+      <h3>Tính năng Giai đoạn 2 (Độ sâu & Bậc thềm)</h3>
+      <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem;">
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+          <input type="checkbox" id="toggle-ground-analysis" checked>
+          <span>Quét Bậc thềm & Lề đường (Ground & Curb Analyzer)</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+          <input type="checkbox" id="toggle-depth-analysis" checked>
+          <span>Quét Vật cản tầm đầu/bạt che (Head Clearance Frustum)</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Bảng điều khiển kiểm thử -->
+    <div class="control-card">
+      <h3>Nguồn hình ảnh & Điều khiển</h3>
+      <div class="button-row">
+        <button id="btn-toggle-app-debug" class="btn-ctrl">Bật camera</button>
+        <button id="btn-use-camera" class="btn-ctrl">Dùng Camera sau</button>
+      </div>
+
+      <div class="file-input-wrapper">
+        <label for="video-file-input">Hoặc tải Video thực tế để kiểm thử (MP4/WebM):</label>
+        <input type="file" id="video-file-input" accept="video/mp4,video/webm">
+      </div>
+
+      <div class="slider-group" style="margin-top: 14px;">
+        <label for="conf-slider">Ngưỡng tin cậy (Confidence):</label>
+        <input type="range" id="conf-slider" min="0.2" max="0.85" step="0.05" value="0.45">
+        <span id="conf-value" style="font-weight: bold; width: 45px;">45%</span>
+      </div>
+    </div>
+
+    <!-- Đo đạc định lượng & Thanh công cụ Người bảo hộ đi kèm (Giai đoạn 3) -->
+    <div class="control-card">
+      <h3>Thanh công cụ Người bảo hộ đi kèm (Field Testing)</h3>
+      <div class="button-row">
+        <button id="btn-mark-good" class="btn-ctrl" style="background: #15803d; border-color: #22c55e;">Cảnh báo tốt (0)</button>
+        <button id="btn-mark-miss" class="btn-ctrl btn-danger">Bỏ sót vật cản (0)</button>
+        <button id="btn-mark-false" class="btn-ctrl" style="background: #b45309; border-color: #f59e0b;">Báo nhầm (0)</button>
+      </div>
+      <div class="button-row" style="margin-top: 8px;">
+        <button id="btn-record-metrics" class="btn-ctrl">Bắt đầu ghi số liệu (Benchmarking)</button>
+      </div>
+      <div id="recording-status" class="recording-status">Sẵn sàng đo đạc độ trễ và tỷ lệ bỏ sót.</div>
+    </div>
+
+    <!-- Dẫn đường từng bước GPS & La bàn (Giai đoạn 4) -->
+    <div class="control-card">
+      <h3>Dẫn đường từng bước (Turn-by-Turn GPS)</h3>
+      <div style="background: #111; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 0.9rem;">
+        <div><strong>Trạng thái:</strong> <span id="nav-status-text" style="color: #facc15;">Chưa kích hoạt</span></div>
+        <div style="margin-top: 4px;"><strong>Chỉ dẫn:</strong> <span id="nav-instruction-text" style="color: #22c55e;">--</span></div>
+        <div style="display: flex; gap: 14px; margin-top: 6px; font-size: 0.8rem; color: #aaa;">
+          <div>Mốc: <span id="nav-waypoint-idx" style="color: #fff;">0/0</span></div>
+          <div>Cự ly: <span id="nav-distance-text" style="color: #fff;">-- m</span></div>
+          <div>Sai số GPS: <span id="nav-accuracy-text" style="color: #fff;">-- m</span></div>
+          <div>La bàn: <span id="nav-compass-text" style="color: #fff;">--°</span></div>
+        </div>
+      </div>
+      <div class="button-row">
+        <button id="btn-start-nav-gps" class="btn-ctrl" style="background: #1d4ed8; border-color: #3b82f6;">Bật GPS thật</button>
+        <button id="btn-start-nav-sim" class="btn-ctrl" style="background: #047857; border-color: #10b981;">Mô phỏng (Simulate)</button>
+        <button id="btn-stop-nav" class="btn-ctrl">Dừng GPS</button>
+      </div>
+      <div style="margin-top: 6px;">
+        <button id="btn-request-compass" class="btn-ctrl" style="width: 100%; font-size: 0.8rem;">Cấp quyền La bàn số (iOS Safari)</button>
+      </div>
+    </div>
+
+    <!-- Kiểm thử âm thanh định hướng -->
+    <div class="control-card">
+      <h3>Thử nghiệm âm thanh Stereo Pan</h3>
+      <div class="button-row">
+        <button id="btn-test-sound-left" class="btn-ctrl">Bíp Trái (-0.85)</button>
+        <button id="btn-test-sound-center" class="btn-ctrl">Bíp Giữa (0.0)</button>
+        <button id="btn-test-sound-right" class="btn-ctrl">Bíp Phải (+0.85)</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Script Modules -->
+  <script src="js/audio_haptics.js"></script>
+  <script src="js/spatial_analyzer.js"></script>
+  <script src="js/ground_analyzer.js"></script>
+  <script src="js/depth_analyzer.js"></script>
+  <script src="js/detector.js"></script>
+  <script src="js/alert_engine.js"></script>
+  <script src="js/metrics_logger.js"></script>
+  <script src="js/battery_optimizer.js"></script>
+  <script src="js/navigation_engine.js"></script>
+  <script src="js/camera.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
