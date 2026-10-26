@@ -145,8 +145,8 @@ subprojects {
     # 5. Update gradle.properties
     props_path = os.path.join(android_dir, "gradle.properties")
     with open(props_path, "a", encoding="utf-8") as f:
-        f.write("\norg.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=2G\nandroid.useAndroidX=true\nandroid.enableJetifier=true\n")
-    print("  ✓ Updated android/gradle.properties (JVM args 4G)")
+        f.write("\norg.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=2G\nandroid.useAndroidX=true\nandroid.enableJetifier=true\nkotlin.jvm.target.validation.mode=warning\nandroid.suppressUnsupportedCompileSdk=36\n")
+    print("  ✓ Updated android/gradle.properties (JVM args 4G, kotlin validation warning)")
 
     print(">>> [configure_android.py] Android configuration complete!")
 
