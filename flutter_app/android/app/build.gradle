@@ -48,9 +48,11 @@ android {
         versionName flutterVersionName
     }
 
-    buildTypes {
+        buildTypes {
         release {
             signingConfig signingConfigs.debug
+            minifyEnabled false
+            shrinkResources false
         }
     }
 
