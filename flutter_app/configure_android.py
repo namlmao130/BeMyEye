@@ -43,6 +43,11 @@ def configure():
         content = re.sub(r'minSdk\s*=\s*\S+', 'minSdk = 26', content)
         content = re.sub(r'minSdkVersion\s*\S+', 'minSdkVersion 26', content)
 
+        # Force Java 17 and Kotlin JVM Target 17
+        content = content.replace("JavaVersion.VERSION_1_8", "JavaVersion.VERSION_17")
+        content = content.replace("jvmTarget = '1.8'", "jvmTarget = '17'")
+        content = content.replace('jvmTarget = "1.8"', 'jvmTarget = "17"')
+
         # Ensure aaptOptions noCompress for .tflite
         if "aaptOptions" not in content and "noCompress" not in content:
             aapt_block = """
@@ -69,17 +74,51 @@ def configure():
 
         with open(build_gradle_path, "w", encoding="utf-8") as f:
             f.write(content)
-        print("  ✓ Updated android/app/build.gradle (compileSdk=36, targetSdk=36, minSdk=26, aaptOptions, minifyEnabled=false)")
+        print("  ✓ Updated android/app/build.gradle (compileSdk=36, targetSdk=36, minSdk=26, Java/Kotlin=17, aaptOptions, minifyEnabled=false)")
     else:
         print("  ! android/app/build.gradle not found!")
 
-    # 2. Write proguard-rules.pro
+    # 2. Update root android/build.gradle to force Java 17 on all subprojects (tflite_flutter, etc.)
+    root_gradle_path = os.path.join(android_dir, "build.gradle")
+    if os.path.exists(root_gradle_path):
+        with open(root_gradle_path, "r", encoding="utf-8") as f:
+            root_content = f.read()
+
+        subprojects_block = """
+// Force Java 17 across all plugins and subprojects
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                compileOptions {
+                    sourceCompatibility JavaVersion.VERSION_17
+                    targetCompatibility JavaVersion.VERSION_17
+                }
+            }
+        }
+        tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+            kotlinOptions {
+                jvmTarget = '17'
+            }
+        }
+    }
+}
+"""
+        if "jvmTarget = '17'" not in root_content:
+            root_content += "\n" + subprojects_block
+            with open(root_gradle_path, "w", encoding="utf-8") as f:
+                f.write(root_content)
+            print("  ✓ Updated android/build.gradle (enforced Java 17 across all subprojects)")
+    else:
+        print("  ! android/build.gradle not found!")
+
+    # 3. Write proguard-rules.pro
     proguard_path = os.path.join(android_dir, "app", "proguard-rules.pro")
     with open(proguard_path, "w", encoding="utf-8") as f:
         f.write(PROGUARD_RULES)
     print("  ✓ Created android/app/proguard-rules.pro")
 
-    # 3. Update AndroidManifest.xml
+    # 4. Update AndroidManifest.xml
     manifest_path = os.path.join(android_dir, "app", "src", "main", "AndroidManifest.xml")
     if os.path.exists(manifest_path):
         with open(manifest_path, "r", encoding="utf-8") as f:
@@ -103,7 +142,7 @@ def configure():
     else:
         print("  ! AndroidManifest.xml not found!")
 
-    # 4. Update gradle.properties
+    # 5. Update gradle.properties
     props_path = os.path.join(android_dir, "gradle.properties")
     with open(props_path, "a", encoding="utf-8") as f:
         f.write("\norg.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=2G\nandroid.useAndroidX=true\nandroid.enableJetifier=true\n")
