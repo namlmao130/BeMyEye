@@ -184,7 +184,13 @@ class CameraPipelineService {
 
       // BƯỚC 3: Phân tích không gian 2D (Spatial Corridor Analysis)
       final int tAnalysisStart = DateTime.now().millisecondsSinceEpoch;
-      final spatialHazards = spatialAnalyzer.analyze(rawDetections, 300, 300);
+      final double walkingSpeed = (batteryOptimizer.userMovementState == 'walking') ? 1.0 : 0.0;
+      final spatialHazards = spatialAnalyzer.analyze(
+        rawDetections,
+        300,
+        300,
+        walkingSpeedMps: walkingSpeed,
+      );
 
       // BƯỚC 4: Phân tích mặt đất & bậc thềm (Ground Plane Luminance Analysis)
       final groundHazards = groundAnalyzer.analyzeLuminance(
