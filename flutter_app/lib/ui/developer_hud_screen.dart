@@ -179,6 +179,34 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+
+            // Chi tiết độ trễ từng chặng (Preprocess / Inference / Analysis)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E293B),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFF334155)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  Text(
+                    'Tiền xử lý: ${pipeline?.latencyPreprocessMs ?? 0}ms',
+                    style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 12),
+                  ),
+                  Text(
+                    'Suy luận AI: ${pipeline?.latencyInferenceMs ?? 0}ms',
+                    style: const TextStyle(color: Color(0xFF4ADE80), fontSize: 12),
+                  ),
+                  Text(
+                    'Phân tích: ${pipeline?.latencyAnalysisMs ?? 0}ms',
+                    style: const TextStyle(color: Color(0xFFFACC15), fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 14),
 
             // Khung Camera thật (CameraPreview) + Vẽ Bounding Box & 3 hành lang

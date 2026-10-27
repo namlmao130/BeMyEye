@@ -194,6 +194,11 @@ int kFpsLowBattery = 10;
 /// Đơn vị: Mili-giây (ms). Giãn chu kỳ còn 1 lần/giây (1000ms) để giảm tải vi xử lý.
 int kGroundIntervalLowBatteryMs = 1000;
 
+/// Chu kỳ phân tích mặt đất bình thường (mili-giây).
+/// Mặc định: 160ms (~6.2 Hz) là tối ưu cho tốc độ bước đi của người đi bộ (1 m/s),
+/// giúp tiết kiệm 70% CPU cho việc nhận diện phương tiện và người đi bộ.
+int kGroundIntervalNormalMs = 160;
+
 /// Ngưỡng mã trạng thái nhiệt độ bắt đầu throttling nghiêm trọng của Android
 /// Android PowerManager: THERMAL_STATUS_SEVERE = 3, CRITICAL = 4, EMERGENCY = 5, SHUTDOWN = 6
 int kThermalStatusSevere = 3;

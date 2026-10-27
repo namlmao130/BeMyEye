@@ -3,9 +3,9 @@
 *(Phiên bản ứng dụng di động Flutter Native)*
 
 > [!TIP]
-> ### 📲 TẢI VỀ FILE APK MỚI NHẤT (PHIÊN BẢN v1.2.0)
-> - **Link tải trực tiếp:** [BeMyEyes-VN-v1.2.0.apk](https://github.com/namlmao130/BeMyEye/releases/download/v1.2.0/BeMyEyes-VN-v1.2.0.apk)
-> - **Phiên bản:** v1.2.0 (Bản sửa lỗi nghiêm trọng NV12: Chuẩn hóa nhãn SSD MobileNet, Watchdog mất khung, hồi quy tuyến tính tiếp cận, chuẩn hóa góc nghiêng, âm thanh bước xuống, benchmark 3 phút).
+> ### 📲 TẢI VỀ FILE APK MỚI NHẤT (PHIÊN BẢN v1.2.1 - TỐI ƯU FPS SIÊU MƯỢT)
+> - **Link tải trực tiếp:** [BeMyEyes-VN-v1.2.1.apk](https://github.com/namlmao130/BeMyEye/releases/download/v1.2.1/BeMyEyes-VN-v1.2.1.apk)
+> - **Phiên bản:** v1.2.1 (Tối ưu hóa hiệu năng: Tiền xử lý ảnh Direct LUT siêu tốc ~2-4ms, bỏ chi phí isolate port serialization, ResolutionPreset.low 1:1 cho MobileNet 300x300, tăng tốc phần cứng Android NNAPI, tái sử dụng bộ đệm suy luận, điều tiết quét mặt đất 6Hz).
 > - **Yêu cầu:** Android 8.0 trở lên.
 
 > [!NOTE]

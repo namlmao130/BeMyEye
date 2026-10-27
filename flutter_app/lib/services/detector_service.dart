@@ -27,6 +27,21 @@ class DetectorService {
   List<String> _labels = [];
   double confidenceThreshold = kDefaultConfidenceThreshold;
 
+  // Tái sử dụng bộ đệm TFLite Output Tensors để loại bỏ 100% cấp phát heap mỗi khung hình
+  final List<List<List<double>>> _outputBoxes = List.generate(
+    1,
+    (_) => List.generate(10, (_) => List.filled(4, 0.0)),
+  );
+  final List<List<double>> _outputClasses = List.generate(1, (_) => List.filled(10, 0.0));
+  final List<List<double>> _outputScores = List.generate(1, (_) => List.filled(10, 0.0));
+  final List<double> _numDetections = List.filled(1, 0.0);
+  late final Map<int, Object> _outputs = <int, Object>{
+    0: _outputBoxes,
+    1: _outputClasses,
+    2: _outputScores,
+    3: _numDetections,
+  };
+
   // Bản đồ nhãn tiếng Việt & Phân loại đối tượng đường phố Việt Nam (đồng bộ hoàn toàn với bản web)
   static const Map<String, Map<String, dynamic>> classMappings = {
     // Phương tiện giao thông (Mức độ ưu tiên cao nhất)
@@ -133,29 +148,42 @@ class DetectorService {
       return;
     }
 
-    // 2. Thử nạp mô hình với GPU / NNAPI Delegate, tự động quay về CPU khi lỗi
+    // 2. Thử nạp mô hình với NNAPI / GPU / XNNPack, tự động quay về CPU khi lỗi
     Interpreter? interpreter;
     String selectedDelegate = 'CPU';
 
-    // Thử GPU Delegate
     if (Platform.isAndroid) {
+      // Ưu tiên 1 trên Android: NNAPI (Neural Networks API cho NPU/DSP phần cứng)
       try {
-        final gpuOptions = InterpreterOptions()..threads = 4;
-        try {
-          gpuOptions.addDelegate(GpuDelegateV2());
-          interpreter = await _interpreterCreator(modelPath, options: gpuOptions);
-          selectedDelegate = 'GPU';
-        } catch (_) {
-          interpreter = null;
-        }
+        final nnapiOptions = InterpreterOptions()
+          ..threads = 2
+          ..useNnApiForAndroid = true;
+        interpreter = await _interpreterCreator(modelPath, options: nnapiOptions);
+        selectedDelegate = 'NNAPI';
       } catch (_) {
         interpreter = null;
       }
 
-      // Thử XNNPack Delegate trên Android nếu GPU thất bại
+      // Ưu tiên 2: Thử GPU Delegate nếu NNAPI không tương thích
       if (interpreter == null) {
         try {
-          final xnnOptions = InterpreterOptions()..threads = 4;
+          final gpuOptions = InterpreterOptions()..threads = 2;
+          try {
+            gpuOptions.addDelegate(GpuDelegateV2());
+            interpreter = await _interpreterCreator(modelPath, options: gpuOptions);
+            selectedDelegate = 'GPU';
+          } catch (_) {
+            interpreter = null;
+          }
+        } catch (_) {
+          interpreter = null;
+        }
+      }
+
+      // Ưu tiên 3: Thử XNNPack Delegate
+      if (interpreter == null) {
+        try {
+          final xnnOptions = InterpreterOptions()..threads = 2;
           xnnOptions.addDelegate(XNNPackDelegate());
           interpreter = await _interpreterCreator(modelPath, options: xnnOptions);
           selectedDelegate = 'XNNPACK';
@@ -165,19 +193,27 @@ class DetectorService {
       }
     } else if (Platform.isIOS) {
       try {
-        final gpuOptions = InterpreterOptions()..threads = 4;
-        gpuOptions.addDelegate(GpuDelegate());
-        interpreter = await _interpreterCreator(modelPath, options: gpuOptions);
-        selectedDelegate = 'GPU';
+        final iosOptions = InterpreterOptions()
+          ..threads = 2
+          ..useMetalDelegateForIOS = true;
+        interpreter = await _interpreterCreator(modelPath, options: iosOptions);
+        selectedDelegate = 'METAL';
       } catch (_) {
-        interpreter = null;
+        try {
+          final gpuOptions = InterpreterOptions()..threads = 2;
+          gpuOptions.addDelegate(GpuDelegate());
+          interpreter = await _interpreterCreator(modelPath, options: gpuOptions);
+          selectedDelegate = 'GPU';
+        } catch (_) {
+          interpreter = null;
+        }
       }
     }
 
-    // Fallback về CPU thuần
+    // Fallback về CPU tối ưu 2 luồng (tránh tranh chấp lõi nhỏ trên chip kiến trúc big.LITTLE)
     if (interpreter == null) {
       try {
-        final cpuOptions = InterpreterOptions()..threads = 4;
+        final cpuOptions = InterpreterOptions()..threads = 2;
         interpreter = await _interpreterCreator(modelPath, options: cpuOptions);
         selectedDelegate = 'CPU';
       } catch (e) {
@@ -270,7 +306,7 @@ class DetectorService {
     return results;
   }
 
-  /// Suy luận nhận diện vật thể từ khung hình camera
+  /// Suy luận nhận diện vật thể từ khung hình camera (Tái sử dụng bộ đệm, Zero GC Allocation)
   List<Map<String, dynamic>> detectFromImage(
     Uint8List imageBytes,
     int width,
@@ -281,28 +317,13 @@ class DetectorService {
     }
 
     try {
-      final outputBoxes = List.generate(
-        1,
-        (_) => List.generate(10, (_) => List.filled(4, 0.0)),
-      );
-      final outputClasses = List.generate(1, (_) => List.filled(10, 0.0));
-      final outputScores = List.generate(1, (_) => List.filled(10, 0.0));
-      final numDetections = List.filled(1, 0.0);
-
-      final outputs = <int, Object>{
-        0: outputBoxes,
-        1: outputClasses,
-        2: outputScores,
-        3: numDetections,
-      };
-
-      _interpreter!.runForMultipleInputs([imageBytes], outputs);
+      _interpreter!.runForMultipleInputs([imageBytes], _outputs);
 
       return parsePredictions(
-        rawBoxes: outputBoxes[0],
-        rawClasses: outputClasses[0],
-        rawScores: outputScores[0],
-        count: numDetections[0].toInt(),
+        rawBoxes: _outputBoxes[0],
+        rawClasses: _outputClasses[0],
+        rawScores: _outputScores[0],
+        count: _numDetections[0].toInt(),
         imageWidth: width,
         imageHeight: height,
       );
