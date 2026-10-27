@@ -1,9 +1,11 @@
+import '../config/thresholds.dart';
 import '../models/detection_result.dart';
 import '../models/ground_hazard.dart';
 import 'audio_haptics_service.dart';
 
 /// alert_decision_engine.dart
 /// Bộ não ra quyết định cảnh báo, xếp hạng ưu tiên hiểm họa và chống mỏi thính giác
+/// Sửa Lỗi 2: Bíp và rung vẫn lặp theo chu kỳ nhưng giọng nói không lặp và không cắt ngang câu.
 
 class AlertCandidate {
   final String id;
@@ -37,24 +39,29 @@ class AlertDecisionEngine {
   final AudioHapticsService audio;
 
   int _lastBeepTime = 0;
-  int _lastAlertActivityTime = DateTime.now().millisecondsSinceEpoch;
-  int _lastHeartbeatTime = DateTime.now().millisecondsSinceEpoch;
+  int _lastAlertActivityTime = 0;
+  int _lastHeartbeatTime = 0;
 
-  // Chu kỳ bíp đã tinh chỉnh để chống mỏi thính giác
-  static const int beepIntervalCriticalMs = 240;
-  static const int beepIntervalNearMs = 700;
-  static const int beepIntervalFarMs = 2200;
+  // Quản lý trạng thái giọng nói chống lặp và chống cắt ngang
+  final Map<String, int> _threatSpeechTimeMap = {};
+  int _lastAnySpeechTime = 0;
+  int _lastSpokenPriority = 0;
 
   AlertCandidate? currentThreat;
 
-  AlertDecisionEngine({required this.audio});
+  AlertDecisionEngine({required this.audio}) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _lastAlertActivityTime = now;
+    _lastHeartbeatTime = now;
+  }
 
   AlertCandidate? process({
     required List<DetectionResult> objects2D,
     required List<GroundHazard> groundHazards,
     List<DetectionResult> genericObstacles = const [],
+    int? customNow,
   }) {
-    final int now = DateTime.now().millisecondsSinceEpoch;
+    final int now = customNow ?? DateTime.now().millisecondsSinceEpoch;
     final List<AlertCandidate> candidates = [];
 
     // 1. Lọc vật thể 2D & Deadzone Filter
@@ -113,7 +120,8 @@ class AlertDecisionEngine {
       currentThreat = null;
 
       // Nhịp đập giữ liên lạc: Rung nhẹ 35ms mỗi 12 giây im lặng
-      if ((now - _lastAlertActivityTime >= 12000) && (now - _lastHeartbeatTime >= 12000)) {
+      if ((now - _lastAlertActivityTime >= kHeartbeatIntervalMs) &&
+          (now - _lastHeartbeatTime >= kHeartbeatIntervalMs)) {
         audio.triggerHeartbeatHaptic();
         _lastHeartbeatTime = now;
       }
@@ -127,21 +135,68 @@ class AlertDecisionEngine {
 
     if (primary == null) return null;
 
-    // Kiểm tra Cooldown
-    int requiredInterval = beepIntervalFarMs;
+    final int threatScore = calculateThreatScore(primary);
+
+    // Chu kỳ bíp định hướng âm thanh (240ms nguy cấp, 700ms gần, 2200ms xa)
+    int requiredBeepInterval = kBeepIntervalFarMs;
     if (primary.distanceLevel == DistanceLevel.critical) {
-      requiredInterval = beepIntervalCriticalMs;
+      requiredBeepInterval = kBeepIntervalCriticalMs;
     } else if (primary.distanceLevel == DistanceLevel.near) {
-      requiredInterval = beepIntervalNearMs;
+      requiredBeepInterval = kBeepIntervalNearMs;
     }
 
-    if (now - _lastBeepTime >= requiredInterval) {
-      _emitAlert(primary);
+    // Bíp và Rung phát liên tục theo chu kỳ để giữ cảm nhận không gian
+    if (now - _lastBeepTime >= requiredBeepInterval) {
+      _playBeepAndHaptic(primary);
       _lastBeepTime = now;
       _lastAlertActivityTime = now;
     }
 
+    // Xử lý Giọng nói riêng biệt: mỗi mối đe dọa chỉ nói 1 lần rồi im tối thiểu 3 giây
+    _handleSpeechAlert(primary, threatScore, now);
+
     return primary;
+  }
+
+  int calculateThreatScore(AlertCandidate c) {
+    int score = 0;
+
+    // Cự ly
+    if (c.distanceLevel == DistanceLevel.critical) {
+      score += 100;
+    } else if (c.distanceLevel == DistanceLevel.near) {
+      score += 40;
+    } else {
+      score += 10;
+    }
+
+    // Hướng: Hành lang giữa nguy hiểm nhất
+    if (c.direction == DirectionZone.center) {
+      score += 50;
+    } else {
+      score += 15;
+    }
+
+    // Hiểm họa đặc biệt: Bậc bước xuống / mép lề đường (Vật cản âm)
+    if (c.isNegativeObstacle) score += 170;
+
+    // Xe máy lao tới
+    if (c.isApproaching) score += 160;
+
+    // Vật cản tầm đầu / bạt che
+    if (c.isHeadLevelHazard) score += 130;
+
+    // Bậc tam cấp bước lên
+    if (c.category == 'ground_hazard' && !c.isNegativeObstacle) score += 85;
+
+    // Phương tiện & Người
+    if (c.category == 'vehicle') {
+      score += 35;
+    } else if (c.category == 'pedestrian') {
+      score += 15;
+    }
+
+    return score;
   }
 
   AlertCandidate? _selectPrimaryThreat(List<AlertCandidate> list) {
@@ -149,33 +204,7 @@ class AlertDecisionEngine {
     int highestScore = -1;
 
     for (final c in list) {
-      int score = 0;
-
-      // Cự ly
-      if (c.distanceLevel == DistanceLevel.critical) score += 100;
-      else if (c.distanceLevel == DistanceLevel.near) score += 40;
-      else score += 10;
-
-      // Hướng: Hành lang giữa nguy hiểm nhất
-      if (c.direction == DirectionZone.center) score += 50;
-      else score += 15;
-
-      // Hiểm họa đặc biệt: Bậc bước xuống / mép lề đường (Vật cản âm)
-      if (c.isNegativeObstacle) score += 170;
-
-      // Xe máy lao tới
-      if (c.isApproaching) score += 160;
-
-      // Vật cản tầm đầu / bạt che
-      if (c.isHeadLevelHazard) score += 130;
-
-      // Bậc tam cấp bước lên
-      if (c.category == 'ground_hazard' && !c.isNegativeObstacle) score += 85;
-
-      // Phương tiện & Người
-      if (c.category == 'vehicle') score += 35;
-      else if (c.category == 'pedestrian') score += 15;
-
+      final score = calculateThreatScore(c);
       if (score > highestScore) {
         highestScore = score;
         best = c;
@@ -185,40 +214,34 @@ class AlertDecisionEngine {
     return best;
   }
 
-  void _emitAlert(AlertCandidate threat) {
-    // 1. CẢNH BÁO BẬC BƯỚC XUỐNG / MÉP LỀ ĐƯỜNG (Cực kỳ nguy hiểm)
+  /// Phát âm thanh bíp định hướng và rung xúc giác theo chu kỳ
+  void _playBeepAndHaptic(AlertCandidate threat) {
     if (threat.isNegativeObstacle) {
       audio.playDirectionalBeep(pan: 0.0, pitch: 320, durationMs: 110);
       audio.triggerHaptic(HapticIntensity.critical);
-      audio.speakVietnamese('Chú ý: bậc đi xuống!', force: true);
       return;
     }
 
-    // 2. BẬC BƯỚC LÊN
     if (threat.category == 'ground_hazard') {
       audio.playDirectionalBeep(pan: 0.0, pitch: 480, durationMs: 80);
       audio.triggerHaptic(HapticIntensity.near);
-      if (threat.distanceLevel != DistanceLevel.far) {
-        audio.speakVietnamese('Có bậc bước lên');
-      }
       return;
     }
 
-    // 3. VẬT CẢN TẦM ĐẦU / BẠT CHE
     if (threat.isHeadLevelHazard) {
       audio.playDirectionalBeep(pan: threat.panValue, pitch: 1100, durationMs: 75);
       audio.triggerHaptic(HapticIntensity.critical);
-      audio.speakVietnamese('Vật cản ngang đầu!', force: true);
       return;
     }
 
-    // 4. VẬT THỂ TIÊU CHUẨN
     int pitch = 440;
-    if (threat.distanceLevel == DistanceLevel.critical) pitch = 980;
-    else if (threat.distanceLevel == DistanceLevel.near) pitch = 680;
+    if (threat.distanceLevel == DistanceLevel.critical) {
+      pitch = 980;
+    } else if (threat.distanceLevel == DistanceLevel.near) {
+      pitch = 680;
+    }
 
     final int duration = threat.distanceLevel == DistanceLevel.critical ? 80 : 50;
-
     audio.playDirectionalBeep(pan: threat.panValue, pitch: pitch, durationMs: duration);
 
     if (threat.distanceLevel == DistanceLevel.critical || threat.isApproaching) {
@@ -226,12 +249,80 @@ class AlertDecisionEngine {
     } else if (threat.distanceLevel == DistanceLevel.near) {
       audio.triggerHaptic(HapticIntensity.near);
     }
+  }
 
-    // Giọng nói ngắn gọn chỉ khi nguy cấp
-    if (threat.isApproaching) {
-      audio.speakVietnamese('${threat.vietnameseLabel} đang tới gần!', force: true);
-    } else if (threat.distanceLevel == DistanceLevel.critical && threat.direction == DirectionZone.center) {
-      audio.speakVietnamese('Vật cản trước mặt');
+  /// Quản lý phát giọng nói: Mỗi mối đe dọa chỉ nói một lần, sau đó im tối thiểu 3 giây.
+  /// Chỉ ngắt câu khi mối đe dọa mới có mức ưu tiên cao hơn hẳn.
+  void _handleSpeechAlert(AlertCandidate threat, int threatScore, int now) {
+    String? text;
+    String speechKey = '';
+    int speechPriority = 0;
+
+    if (threat.isNegativeObstacle) {
+      text = 'Chú ý: bậc đi xuống!';
+      speechKey = 'step_down';
+      speechPriority = 250;
+    } else if (threat.isHeadLevelHazard) {
+      text = 'Vật cản ngang đầu!';
+      speechKey = 'head_hazard';
+      speechPriority = 220;
+    } else if (threat.isApproaching) {
+      text = '${threat.vietnameseLabel} đang tới gần!';
+      speechKey = 'approaching_${threat.id}';
+      speechPriority = 210;
+    } else if (threat.category == 'ground_hazard') {
+      if (threat.distanceLevel != DistanceLevel.far) {
+        text = 'Có bậc bước lên';
+        speechKey = 'step_up';
+        speechPriority = 120;
+      }
+    } else if (threat.distanceLevel == DistanceLevel.critical &&
+        threat.direction == DirectionZone.center) {
+      text = 'Vật cản trước mặt';
+      speechKey = 'critical_center_${threat.id}';
+      speechPriority = 160;
     }
+
+    if (text == null) return;
+
+    final int lastSpoken = _threatSpeechTimeMap[speechKey] ?? 0;
+    final int elapsedThisThreat = now - lastSpoken;
+    final int elapsedAnySpeech = now - _lastAnySpeechTime;
+
+    // Điều kiện phát giọng nói:
+    // 1. Mối đe dọa này chưa được nói trong vòng kSpeechCooldownMs (tối thiểu 3 giây)
+    // 2. VÀ hệ thống không đang nói câu khác trong 3 giây gần nhất,
+    //    TRỪ KHI câu mới có mức ưu tiên cao hơn hẳn (chênh lệch >= 40 điểm) và câu cũ đã nói ít nhất 800ms
+    final bool canSpeakThis = elapsedThisThreat >= kSpeechCooldownMs;
+    final bool isHigherPriorityInterrupt =
+        (speechPriority >= _lastSpokenPriority + 40) && (elapsedAnySpeech >= 800);
+
+    if (canSpeakThis && (elapsedAnySpeech >= kSpeechCooldownMs || isHigherPriorityInterrupt)) {
+      _threatSpeechTimeMap[speechKey] = now;
+      _lastAnySpeechTime = now;
+      _lastSpokenPriority = speechPriority;
+
+      audio.speakVietnamese(
+        text,
+        force: isHigherPriorityInterrupt,
+        priority: speechPriority,
+        customNow: now,
+      );
+    }
+
+    // Dọn dẹp cache lịch sử cũ sau 15 giây
+    if (_threatSpeechTimeMap.length > 20) {
+      _threatSpeechTimeMap.removeWhere((_, time) => now - time > 15000);
+    }
+  }
+
+  void reset() {
+    _lastBeepTime = 0;
+    _lastAlertActivityTime = 0;
+    _lastHeartbeatTime = 0;
+    _lastAnySpeechTime = 0;
+    _lastSpokenPriority = 0;
+    _threatSpeechTimeMap.clear();
+    currentThreat = null;
   }
 }
