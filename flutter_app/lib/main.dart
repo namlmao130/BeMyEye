@@ -9,7 +9,6 @@ import 'services/ground_analyzer.dart';
 import 'services/detector_service.dart';
 import 'services/battery_optimizer.dart';
 import 'ui/accessible_screen.dart';
-import 'ui/widgets/safety_disclaimer_dialog.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -51,10 +50,33 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
     _detectorService = DetectorService();
     _batteryOptimizer = BatteryThermalOptimizer();
 
-    _detectorService.loadModel();
+    _initDetector();
+  }
+
+  Future<void> _initDetector() async {
+    await _detectorService.loadModel();
+    if (mounted) {
+      setState(() {});
+      if (!_detectorService.isReady) {
+        // Nguyên tắc an toàn: Lỗi phải kêu to, không âm thầm bỏ qua
+        _audioService.speakVietnamese(
+          'Không tải được mô hình nhận diện, đừng dùng ứng dụng để dẫn đường',
+          force: true,
+        );
+      }
+    }
   }
 
   void _toggleApp() {
+    // Nếu mô hình chưa sẵn sàng hoặc có lỗi, khóa hoàn toàn chức năng dẫn đường
+    if (!_detectorService.isReady) {
+      _audioService.speakVietnamese(
+        'Không tải được mô hình nhận diện, đừng dùng ứng dụng để dẫn đường',
+        force: true,
+      );
+      return;
+    }
+
     setState(() {
       _isAppActive = !_isAppActive;
     });
@@ -102,6 +124,7 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
           audio: _audioService,
           alertEngine: _alertEngine,
           navService: _navService,
+          detectorService: _detectorService,
           isAppActive: _isAppActive,
           onToggleApp: _toggleApp,
         ),

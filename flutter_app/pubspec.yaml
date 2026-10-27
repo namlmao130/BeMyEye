@@ -48,4 +48,6 @@ flutter:
   # Cấu hình tài nguyên âm thanh & mô hình AI offline
   assets:
     - assets/models/
+    - assets/models/labelmap.txt
+    - assets/models/mobilenet_ssd.tflite
     - assets/sounds/

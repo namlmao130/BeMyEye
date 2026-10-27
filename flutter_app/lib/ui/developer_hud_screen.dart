@@ -3,6 +3,7 @@ import '../../config/thresholds.dart';
 import '../../services/audio_haptics_service.dart';
 import '../../services/alert_decision_engine.dart';
 import '../../services/navigation_service.dart';
+import '../../services/detector_service.dart';
 
 /// developer_hud_screen.dart
 /// Màn hình kỹ thuật dành cho Nhà phát triển & Người bảo hộ đi cùng (Sighted Companion Toolbar)
@@ -11,12 +12,14 @@ class DeveloperHUDScreen extends StatefulWidget {
   final AudioHapticsService audio;
   final AlertDecisionEngine alertEngine;
   final NavigationService navService;
+  final DetectorService detectorService;
 
   const DeveloperHUDScreen({
     Key? key,
     required this.audio,
     required this.alertEngine,
     required this.navService,
+    required this.detectorService,
   }) : super(key: key);
 
   @override
@@ -32,6 +35,7 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
   Widget build(BuildContext context) {
     final navStatus = widget.navService.getStatus();
     final currentThreat = widget.alertEngine.currentThreat;
+    final det = widget.detectorService;
 
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
@@ -75,6 +79,27 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                 _buildHUDCard('Độ trễ', kPipelineEnabled ? '--' : 'Chưa đo', Colors.white),
                 const SizedBox(width: 8),
                 _buildHUDCard(
+                  'Delegate',
+                  det.activeDelegate,
+                  det.activeDelegate == 'LỖI'
+                      ? const Color(0xFFEF4444)
+                      : (det.activeDelegate == 'GPU' || det.activeDelegate == 'NNAPI')
+                          ? const Color(0xFF22C55E)
+                          : const Color(0xFFFACC15),
+                ),
+                const SizedBox(width: 8),
+                _buildHUDCard(
+                  'Mô hình',
+                  det.isReady ? '${det.labels.length} nhãn' : 'LỖI',
+                  det.isReady ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            Row(
+              children: [
+                _buildHUDCard(
                   'Mối nguy',
                   currentThreat?.vietnameseLabel ?? '--',
                   currentThreat != null ? const Color(0xFFEF4444) : Colors.grey,
@@ -85,7 +110,72 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                   currentThreat?.direction.name.toUpperCase() ?? '--',
                   Colors.white,
                 ),
+                const SizedBox(width: 8),
+                _buildHUDCard(
+                  'Tin cậy AI',
+                  '${(det.confidenceThreshold * 100).toInt()}%',
+                  const Color(0xFF38BDF8),
+                ),
               ],
+            ),
+            const SizedBox(height: 14),
+
+            // Mô hình AI On-device & Hardware Acceleration
+            _buildSection(
+              title: 'Cấu hình Mô hình Thị giác AI (SSD MobileNet)',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Trạng thái: ${det.isReady ? "Sẵn sàng hoạt động" : "Lỗi nạp mô hình"}',
+                    style: TextStyle(
+                      color: det.isReady ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  if (det.loadError != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Chi tiết lỗi: ${det.loadError}',
+                      style: const TextStyle(color: Color(0xFFEF4444), fontSize: 12),
+                    ),
+                  ],
+                  const SizedBox(height: 6),
+                  Text(
+                    'Bộ tăng tốc phần cứng (Delegate): ${det.activeDelegate} (Tự động fallback: GPU → NNAPI → CPU)',
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Tổng số nhãn nạp được: ${det.labels.length} nhãn (COCO SSD 91 dòng)',
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Text(
+                        'Ngưỡng tin cậy (Confidence): ${(det.confidenceThreshold * 100).toInt()}%',
+                        style: const TextStyle(color: Color(0xFFFACC15), fontSize: 13),
+                      ),
+                      Expanded(
+                        child: Slider(
+                          value: det.confidenceThreshold,
+                          min: 0.20,
+                          max: 0.90,
+                          divisions: 14,
+                          label: '${(det.confidenceThreshold * 100).toInt()}%',
+                          activeColor: const Color(0xFFFACC15),
+                          onChanged: (val) {
+                            setState(() {
+                              det.confidenceThreshold = val;
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 14),
 
@@ -101,7 +191,7 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                 children: [
                   const Center(
                     child: Text(
-                      'Luồng Camera On-Device (TFLite YOLO/SSD)',
+                      'Luồng Camera On-Device (TFLite SSD MobileNet)',
                       style: TextStyle(color: Colors.white54, fontSize: 13),
                     ),
                   ),
