@@ -51,12 +51,14 @@ void main() {
       final analyzer = SpatialAnalyzer();
 
       // Giả lập người đứng yên (0 m/s), xe máy (category: 'vehicle') phóng tới rất nhanh
-      // Diện tích xe tăng vọt từ 0.05 lên 0.25 trong ~450ms
+      // Diện tích xe tăng liên tục từ 0.04 lên 0.32 trong ~500ms (>= 5 mẫu, >= 0.3s)
       final frames = [
-        {'time': 0, 'w': 67.0, 'h': 67.0},   // areaRatio ~ 0.05
-        {'time': 150, 'w': 90.0, 'h': 90.0}, // areaRatio ~ 0.09
-        {'time': 300, 'w': 120.0, 'h': 120.0}, // areaRatio ~ 0.16 (growthRate cao, frame 1)
-        {'time': 450, 'w': 150.0, 'h': 150.0}, // areaRatio ~ 0.25 (growthRate cao, frame 2)
+        {'time': 0, 'w': 60.0, 'h': 60.0},     // areaRatio ~ 0.040
+        {'time': 100, 'w': 75.0, 'h': 75.0},   // areaRatio ~ 0.062
+        {'time': 200, 'w': 95.0, 'h': 95.0},   // areaRatio ~ 0.100
+        {'time': 300, 'w': 120.0, 'h': 120.0}, // areaRatio ~ 0.160
+        {'time': 400, 'w': 145.0, 'h': 145.0}, // areaRatio ~ 0.233 (frame 1 thỏa mãn hồi quy tiếp cận)
+        {'time': 500, 'w': 170.0, 'h': 170.0}, // areaRatio ~ 0.321 (frame 2 liên tiếp -> isApproaching)
       ];
 
       List<DetectionResult> lastResults = [];

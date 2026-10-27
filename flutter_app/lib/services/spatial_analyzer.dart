@@ -17,6 +17,20 @@ class AreaSample {
   AreaSample(this.timestamp, this.area);
 }
 
+class ApproachingEvaluation {
+  final bool isApproaching;
+  final double growthRate;
+  final double rSquared;
+  final double slope;
+
+  const ApproachingEvaluation({
+    required this.isApproaching,
+    required this.growthRate,
+    required this.rSquared,
+    required this.slope,
+  });
+}
+
 class SpatialTrack {
   final String id;
   final String label;
@@ -47,23 +61,118 @@ class SpatialTrack {
     lastCy = cy;
     areaHistory.add(AreaSample(timestamp, area));
 
-    // Cửa sổ trượt ~500ms (giữ các mẫu trong vòng 550ms gần nhất)
-    areaHistory.removeWhere((s) => timestamp - s.timestamp > 550);
+    // Cửa sổ trượt kAreaHistoryWindowMs (mặc định 800ms) để đủ ít nhất 5 mẫu và >= 0.3s
+    areaHistory.removeWhere((s) => timestamp - s.timestamp > kAreaHistoryWindowMs);
   }
 
-  /// Tính tốc độ tăng diện tích tương đối: (dArea / lastArea) mỗi giây
-  double calculateRelativeGrowthRate(int now) {
-    if (areaHistory.length < 2) return 0.0;
+  /// Hồi quy tuyến tính diện tích trên >= 5 mẫu, khoảng thời gian >= 0.3s để làm mượt
+  /// và xác định chính xác phương tiện có đang lao tới hay chỉ là nhiễu nhảy hộp (+-20%)
+  ApproachingEvaluation evaluateApproaching(int now, double walkingSpeedMps) {
+    if (areaHistory.length < kMinApproachingSamples) {
+      return const ApproachingEvaluation(
+        isApproaching: false,
+        growthRate: 0.0,
+        rSquared: 0.0,
+        slope: 0.0,
+      );
+    }
 
     final oldest = areaHistory.first;
-    final double dt = (now - oldest.timestamp) / 1000.0;
-    if (dt < 0.10) return 0.0; // Khoảng thời gian quá ngắn chưa đủ tin cậy
+    final double timeSpanSec = (now - oldest.timestamp) / 1000.0;
+    if (timeSpanSec < kMinApproachingTimeSpanSec) {
+      return const ApproachingEvaluation(
+        isApproaching: false,
+        growthRate: 0.0,
+        rSquared: 0.0,
+        slope: 0.0,
+      );
+    }
 
-    final double dArea = lastArea - oldest.area;
-    if (lastArea <= 0.001) return 0.0;
+    final int n = areaHistory.length;
+    final int t0 = oldest.timestamp;
 
-    // Tốc độ tăng tương đối (1/giây)
-    return (dArea / lastArea) / dt;
+    double sumX = 0.0;
+    double sumY = 0.0;
+    for (int i = 0; i < n; i++) {
+      final double xi = (areaHistory[i].timestamp - t0) / 1000.0;
+      final double yi = areaHistory[i].area;
+      sumX += xi;
+      sumY += yi;
+    }
+
+    final double meanX = sumX / n;
+    final double meanY = sumY / n;
+    if (meanY <= 0.001) {
+      return const ApproachingEvaluation(
+        isApproaching: false,
+        growthRate: 0.0,
+        rSquared: 0.0,
+        slope: 0.0,
+      );
+    }
+
+    double ssXX = 0.0;
+    double ssXY = 0.0;
+    double ssYY = 0.0;
+    for (int i = 0; i < n; i++) {
+      final double xi = (areaHistory[i].timestamp - t0) / 1000.0;
+      final double yi = areaHistory[i].area;
+      final double dx = xi - meanX;
+      final double dy = yi - meanY;
+      ssXX += dx * dx;
+      ssXY += dx * dy;
+      ssYY += dy * dy;
+    }
+
+    if (ssXX < 1e-9) {
+      return const ApproachingEvaluation(
+        isApproaching: false,
+        growthRate: 0.0,
+        rSquared: 0.0,
+        slope: 0.0,
+      );
+    }
+
+    final double slope = ssXY / ssXX;
+    final double rSquared = (ssYY > 1e-9) ? (ssXY * ssXY) / (ssXX * ssYY) : 0.0;
+    final double relativeGrowthRate = slope / meanY;
+
+    // Bù trừ chuyển động của chính người đi bộ (bước chân/GPS)
+    final double dynamicThreshold = kApproachThreshold + (walkingSpeedMps * 0.15);
+
+    // Tính tính liên tục tăng tương đối giữa các bước kế tiếp nhau
+    int nonDecreasingSteps = 0;
+    for (int i = 1; i < n; i++) {
+      if (areaHistory[i].area >= areaHistory[i - 1].area * 0.90) {
+        nonDecreasingSteps++;
+      }
+    }
+    final double continuityRatio = nonDecreasingSteps / (n - 1);
+
+    // Điều kiện tiếp cận:
+    // 1. Độ dốc dương (slope > 0)
+    // 2. Tốc độ tăng tương đối vượt ngưỡng động
+    // 3. R^2 >= kMinApproachingRSquared (loại bỏ hộp dao động ngẫu nhiên quanh 1 giá trị)
+    // 4. Mẫu cuối cùng phải lớn hơn mẫu đầu tiên
+    // 5. Tỷ lệ bước tăng tương đối liên tục đạt chuẩn
+    final bool isConsistentIncrease = slope > 0 &&
+        relativeGrowthRate >= dynamicThreshold &&
+        rSquared >= kMinApproachingRSquared &&
+        areaHistory.last.area > oldest.area &&
+        continuityRatio >= 0.70;
+
+    return ApproachingEvaluation(
+      isApproaching: isConsistentIncrease,
+      growthRate: relativeGrowthRate,
+      rSquared: rSquared,
+      slope: slope,
+    );
+  }
+
+  /// Tính tốc độ tăng diện tích tương đối (fallback backward-compatibility)
+  double calculateRelativeGrowthRate(int now) {
+    final eval = evaluateApproaching(now, 0.0);
+    return eval.growthRate;
   }
 }
 
@@ -262,13 +371,11 @@ class SpatialAnalyzer {
       // NGUYÊN TẮC: CHỈ ĐÁNH DẤU CHO PHƯƠNG TIỆN (category == 'vehicle')
       // Vật tĩnh (cột điện, ghế, chậu cây, biển báo) tuyệt đối KHÔNG bao giờ là approaching
       if (category == 'vehicle') {
-        growthRate = track.calculateRelativeGrowthRate(now);
+        final eval = track.evaluateApproaching(now, walkingSpeedMps);
+        growthRate = eval.growthRate;
 
-        // Bù trừ chuyển động của người đi bộ: Nếu người đi nhanh, nâng ngưỡng tương ứng
-        final double dynamicThreshold = kApproachThreshold + (walkingSpeedMps * 0.15);
-
-        // Yêu cầu diện tích đủ lớn (> 4% khung hình) và tốc độ tăng tương đối vượt ngưỡng
-        if (growthRate > dynamicThreshold && areaRatio > 0.04) {
+        // Yêu cầu diện tích đủ lớn (> 4% khung hình) và thỏa mãn hồi quy tuyến tính tiếp cận
+        if (eval.isApproaching && areaRatio > 0.04) {
           track.consecutiveApproachingFrames++;
         } else {
           track.consecutiveApproachingFrames = 0;

@@ -64,6 +64,18 @@ double kLargeVehicleCriticalBottomY = 0.84;
 /// Đơn vị: Tỷ lệ / giây (1/s).
 double kApproachThreshold = 0.15;
 
+/// Số mẫu diện tích tối thiểu để thực hiện hồi quy tuyến tính xác định vật thể tiến lại gần.
+int kMinApproachingSamples = 5;
+
+/// Khoảng thời gian tối thiểu (giây) giữa mẫu cũ nhất và mới nhất để tính hồi quy tuyến tính tiếp cận.
+double kMinApproachingTimeSpanSec = 0.30;
+
+/// Hệ số xác định R-squared tối thiểu của hồi quy tuyến tính để xác nhận xu hướng tăng liên tục không phải nhiễu nhảy hộp.
+double kMinApproachingRSquared = 0.50;
+
+/// Cửa sổ trượt lưu lịch sử diện tích của vật thể (mili-giây).
+int kAreaHistoryWindowMs = 800;
+
 /// Thời gian tối đa giữ lại track vật thể nếu không phát hiện lại trong các frame tiếp theo.
 /// Đơn vị: Mili-giây (ms).
 int kTrackExpirationMs = 600;
