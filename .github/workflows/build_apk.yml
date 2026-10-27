@@ -94,8 +94,9 @@ jobs:
       - name: Prepare APK File
         if: success()
         run: |
+          cp flutter_app/build/app/outputs/flutter-apk/app-release.apk flutter_app/BeMyEyes-VN-v1.2.0.apk
+          cp flutter_app/build/app/outputs/flutter-apk/app-release.apk flutter_app/BeMyEyes-VN-latest.apk
           cp flutter_app/build/app/outputs/flutter-apk/app-release.apk flutter_app/BeMyEyes-VN-v1.1.0.apk
-          cp flutter_app/build/app/outputs/flutter-apk/app-release.apk flutter_app/BeMyEyes-VN-v1.0.0.apk
 
       - name: Upload APK Release Artifact
         if: success()
@@ -103,36 +104,37 @@ jobs:
         with:
           name: BeMyEyes-VN-Release-APK
           path: |
+            flutter_app/BeMyEyes-VN-v1.2.0.apk
+            flutter_app/BeMyEyes-VN-latest.apk
             flutter_app/BeMyEyes-VN-v1.1.0.apk
-            flutter_app/BeMyEyes-VN-v1.0.0.apk
 
       - name: Create GitHub Release with Direct Download
         if: success()
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.1.0
-          name: "Be My Eyes VN v1.1.0 (Bản Hoàn Thiện NV1-NV11)"
+          tag_name: v1.2.0
+          name: "Be My Eyes VN v1.2.0 (Bản Đã Sửa Lỗi Nghiêm Trọng NV12)"
           make_latest: true
           body: |
-            ## 🎉 Be My Eyes VN v1.1.0 - Bản Phát Hành Hoàn Thiện (NV1 -> NV11)
+            ## 🎉 Be My Eyes VN v1.2.0 - Bản Phát Hành Đã Sửa Lỗi Nghiêm Trọng (NV12)
             **Trợ lý thị giác dẫn đường thời gian thực on-device cho người khiếm thị tại Việt Nam**
 
-            ### 🚀 Toàn bộ 11 Nhiệm vụ & Tính năng đã hoàn thành:
-            1. **Luồng Camera Native thời gian thực:** YUV420 → Isolate RGB 300x300 & Luma 160x120 → TFLite SSD MobileNet 91 nhãn COCO chuẩn (Hardware acceleration GPU / XNNPack CPU Fallback).
-            2. **Chống lặp TTS tiếng Việt:** Cooldown tối thiểu 3 giây theo ID mối nguy, chỉ ngắt câu khi có hiểm họa ưu tiên cao hơn hẳn.
-            3. **Thuật toán "Vật thể lao tới" & Ghép track 1-1:** Tính tốc độ tăng diện tích tương đối ((dArea/area)/dt), chỉ áp dụng cho phương tiện giao thông và bù trừ tốc độ đi bộ GPS.
-            4. **Ước lượng khoảng cách & Chặn báo nhầm xe lớn:** Bù trừ góc nghiêng ngực điện thoại (sensors_plus), xe buýt/xe tải ở xa không bị báo nhầm mức Nguy cấp.
-            5. **Phân tích Bậc thềm & Vỉa hè:** Yêu cầu cạnh ngang liền mạch, lọc bỏ vạch kẻ qua đường / khe gạch lát, hạ mức cam kết an toàn khi độ tin cậy chưa cao.
-            6. **Âm thanh Stereo Pan PCM chuẩn & Mono Fallback:** Sử dụng file PCM stereo vật lý cho 2 kênh Trái/Phải; phân biệt cao độ 500Hz - 750Hz - 1000Hz cho người chỉ đeo 1 tai nghe; hỗ trợ đảo kênh L/R.
-            7. **Điều tiết Năng lượng & Nhiệt độ thực (Android Thermal Status API):** Tự động hạ FPS khi pin < 20% hoặc khi quá nhiệt (Severe >= 3), giãn chu kỳ phân tích phụ để bảo vệ máy.
-            8. **Bảo mật & Quyền hạn tối giản:** Chỉ yêu cầu Camera, GPS, Rung, WakeLock, Internet; không có quyền nhạy cảm mic/danh bạ/bộ nhớ.
-            9. **Dẫn đường đi bộ OpenStreetMap / OSRM Foot Profile:** Tuyến đi bộ Turn-by-turn thực tế; tự động dùng cache khi mất mạng; **Safety Preemption:** Giọng nói camera nguy cấp luôn ngắt lời chỉ dẫn GPS.
+            ### 🚀 Các cải tiến và sửa lỗi cốt lõi trong bản v1.2.0:
+            1. **Khắc phục lệch nhãn SSD MobileNet (kLabelOffset = 1):** Sửa lỗi off-by-one giữa SSD MobileNet output (bắt đầu từ 0) và `labelmap.txt` (dòng 0 là ???). Đã kiểm chứng nhận diện chuẩn xác người đi bộ và xe buýt.
+            2. **Trạng thái luồng thực tế (PipelineStatus) & Watchdog:** Bỏ cờ tĩnh `kPipelineEnabled`. Chỉ thông báo chạy khi có khung hình thật trong 1.5s; Watchdog tự ngắt an toàn và phát loa *"Mất tín hiệu camera, đừng dùng để dẫn đường"* nếu mất khung >1.5s hoặc lỗi suy luận $\ge 5$ lần.
+            3. **Hồi quy tuyến tính làm mượt "Vật thể tới gần":** Đánh giá diện tích qua $\ge 5$ mẫu, thời gian $\ge 0.3$s, loại bỏ triệt để hiện tượng hộp giật $\pm 20\%$ quanh vật tĩnh.
+            4. **Chuẩn hóa quy ước bù góc nghiêng ngực:** Khi camera chúc xuống đất, ngưỡng chân vật thể `bottomY` tự động giảm tương ứng để bắt chính xác chướng ngại vật sát chân người dùng.
+            5. **Cân đối điểm đe dọa (calculateThreatScore):** Cảnh báo bậc thềm mức trung bình không bao giờ vượt qua xe hoặc người ở cự ly gần (`near`).
+            6. **Âm thanh phân biệt bậc đi xuống & Tôn trọng Pitch/Duration:** File WAV riêng biệt `step_down.wav` (âm trầm tụt dốc 420Hz $\to$ 220Hz) giúp nhận diện ngay mép hụt chân / lề đường; tôn trọng cao độ và độ dài qua tốc độ phát.
+            7. **Trung thực về dữ liệu trong tài liệu:** Bổ sung banner trạng thái số liệu [Đo thật] vs [Ước tính, chưa kiểm chứng] trong toàn bộ tài liệu kỹ thuật.
+            8. **Chế độ đo hiệu năng 3 phút xuất CSV:** Tích hợp công cụ Benchmark 180s trên Developer HUD để người dùng chạy trên máy thật và gửi số liệu log kiểm chứng.
 
-            ### 📲 Hướng dẫn cài đặt trực tiếp:
-            - Tải tệp `BeMyEyes-VN-v1.1.0.apk` bên dưới trực tiếp về điện thoại Android (Android 8.0 trở lên).
-            - Mở file APK để cài đặt và bắt đầu sử dụng.
+            ### 📲 Tải về và cài đặt trực tiếp file APK:
+            - **[Tải BeMyEyes-VN-v1.2.0.apk](https://github.com/namlmao130/BeMyEye/releases/download/v1.2.0/BeMyEyes-VN-v1.2.0.apk)** (Khuyến nghị cho mọi thiết bị Android 8.0+)
+            - **[Tải BeMyEyes-VN-latest.apk](https://github.com/namlmao130/BeMyEye/releases/download/v1.2.0/BeMyEyes-VN-latest.apk)**
           files: |
+            flutter_app/BeMyEyes-VN-v1.2.0.apk
+            flutter_app/BeMyEyes-VN-latest.apk
             flutter_app/BeMyEyes-VN-v1.1.0.apk
-            flutter_app/BeMyEyes-VN-v1.0.0.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

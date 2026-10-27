@@ -2,13 +2,18 @@
 **Trợ lý dẫn đường thời gian thực cho người khiếm thị trên đường phố Việt Nam**  
 *(Phiên bản ứng dụng di động Flutter Native)*
 
+> [!TIP]
+> ### 📲 TẢI VỀ FILE APK MỚI NHẤT (PHIÊN BẢN v1.2.0)
+> - **Link tải trực tiếp:** [BeMyEyes-VN-v1.2.0.apk](https://github.com/namlmao130/BeMyEye/releases/download/v1.2.0/BeMyEyes-VN-v1.2.0.apk)
+> - **Phiên bản:** v1.2.0 (Bản sửa lỗi nghiêm trọng NV12: Chuẩn hóa nhãn SSD MobileNet, Watchdog mất khung, hồi quy tuyến tính tiếp cận, chuẩn hóa góc nghiêng, âm thanh bước xuống, benchmark 3 phút).
+> - **Yêu cầu:** Android 8.0 trở lên.
+
 > [!NOTE]
-> **TIẾN ĐỘ & TRẠNG THÁI HIỆN TẠI (NV3 ĐÃ HOÀN THÀNH):**
-> - **Luồng Camera Native (`kPipelineEnabled = true`):** Đã kết nối luồng Camera thời gian thực (`camera` package, YUV420), tiền xử lý song song trong Isolate (YUV420 → RGB 300×300 cho SSD MobileNet và → Luma 160×120 cho phân tích bậc thềm), điều tiết khung hình bằng `BatteryThermalOptimizer`, tự động bỏ khung hình trễ (Frame-dropping, không xếp hàng).
-> - **Mô hình On-device & Tăng tốc phần cứng:** Nạp mô hình SSD MobileNet với 91 nhãn COCO chuẩn, tự động chọn Hardware Delegate (`GPU Delegate` → `NNAPI` → `CPU đa luồng`). Báo lỗi to bằng giọng nói và khóa dẫn đường nếu không nạp được mô hình.
-> - **Giữ màn hình sáng (`wakelock_plus`) & Giới hạn nền:** Ứng dụng tự động giữ màn hình luôn sáng khi đang dẫn đường để duy trì luồng camera liên tục. Do chính sách bảo mật của Android 9+ hạn chế nghiêm ngặt việc truy cập camera khi màn hình tắt/ứng dụng chạy ngầm, điện thoại được thiết kế để đeo trước ngực với màn hình sáng ở giao diện đen thuần OLED (`#000000`) nhằm tối thiểu hóa tiêu hao pin.
-> - **Công cụ đo đạc thực địa (CSV Logger):** HUD kỹ thuật cung cấp công cụ ghi log FPS, độ trễ từng chặng (`t_preprocess`, `t_inference`, `t_analysis`, `t_total`), mối đe dọa chính và nút một chạm sao chép toàn bộ CSV vào Clipboard để người kiểm thử gửi lại số liệu thẩm định thực tế.
-> - **Mục tiêu hiệu năng cần đo thực địa:** Đích nhắm $\ge 15$ FPS và độ trễ $< 300$ ms trên thiết bị tầm trung. Hiện tại các số liệu này **chưa có số đo thực tế từ thiết bị phần cứng**, cần chạy APK trên máy thật và xuất CSV để kiểm chứng.
+> **TIẾN ĐỘ & TRẠNG THÁI HIỆN TẠI (NV12 ĐÃ HOÀN THÀNH):**
+> - **Luồng Camera Native & Watchdog:** Trạng thái suy ra từ thực tế (`PipelineStatus`: demo $\to$ starting $\to$ running $\to$ failed). Watchdog giám sát luồng 1.5s, nếu mất khung hoặc lỗi $\ge 5$ lần lập tức báo động và ngắt an toàn.
+> - **Mô hình On-device & Nhãn COCO:** SSD MobileNet chuẩn hóa với `kLabelOffset = 1` (khắc phục lệch nhãn), tự động chọn Hardware Delegate (`GPU Delegate` → `NNAPI` → `CPU đa luồng`). Báo lỗi to bằng giọng nói và khóa dẫn đường nếu không nạp được mô hình.
+> - **Hồi quy tuyến tính làm mượt "Vật thể tới gần":** Đánh giá qua $\ge 5$ mẫu, thời gian $\ge 0.3$s, loại bỏ triệt để hiện tượng hộp giật $\pm 20\%$ quanh vật tĩnh.
+> - **Công cụ đo đạc thực địa & Benchmark 3 phút:** HUD kỹ thuật cung cấp chế độ đo hiệu năng 3 phút xuất log CSV (FPS, độ trễ từng bước, delegate, pin, nhiệt độ) kèm tiêu đề nhắc nhở người kiểm thử chạy trên máy thật và gửi lại số liệu kiểm chứng.
 
 ---
 
