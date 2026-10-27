@@ -2,6 +2,13 @@
 **Dự án:** Trợ lý dẫn đường thời gian thực cho người khiếm thị  
 **Nội dung:** Phát hiện vật cản, ước lượng cự ly & cảnh báo âm thanh định hướng  
 
+> [!IMPORTANT]
+> ### TRẠNG THÁI SỐ LIỆU & NGUYÊN TẮC TRUNG THỰC KỸ THUẬT
+> - **Nguyên tắc an toàn con người:** Ứng dụng liên quan trực tiếp đến an toàn tính mạng người khiếm thị khi tham gia giao thông. Tuyệt đối không khẳng định điều chưa đo, không bịa số và không che lỗi.
+> - **Phân định rõ ràng nguồn gốc số liệu trong báo cáo này:**
+>   - **[Đo thật - Web Prototype]:** Ghi nhận trên bản WebGL trình duyệt Chrome di động (thiết bị tham chiếu Snapdragon 778G, ngày 26/10/2026, file log kiểm chuẩn nội bộ).
+>   - **[Ước tính, chưa kiểm chứng]:** Bản Flutter Native Android hiện tại **chưa có số đo thực địa trên thiết bị thật**. Cần người dùng chạy chế độ đo hiệu năng (HUD Benchmark 3 phút xuất CSV) trên máy thật và gửi số liệu về để cập nhật.
+
 ---
 
 ## 1. TỔNG KẾT CÁC HẠNG MỤC ĐÃ HOÀN THÀNH
@@ -63,13 +70,13 @@ HTTPS Server đang chạy tại:
 
 ## 3. SỐ LIỆU ĐO ĐẠC & TIÊU CHÍ HOÀN THÀNH GIAI ĐOẠN 1
 
-| Chỉ số đo lường | Tiêu chí yêu cầu (Target) | Kết quả đạt được | Đánh giá |
+| Chỉ số đo lường | Tiêu chí yêu cầu (Target) | Kết quả & Trạng thái số liệu | Đánh giá |
 |---|---|---|---|
-| **Tốc độ khung hình (FPS)** | $\ge 15$ FPS trên smartphone tầm trung | **18 – 26 FPS** (trên GPU WebGL di động) | **Đạt** |
-| **Độ trễ suy luận (Latency)** | $< 300$ ms | **35 – 65 ms** (MobileNet SSD Lite) | **Đạt vượt kỳ vọng** |
-| **Độ phủ nhãn nguy hiểm** | Nhận diện xe máy, ô tô, người, bàn ghế | 100% các lớp vật thể chính đều được ánh xạ tiếng Việt | **Đạt** |
-| **Phát hiện xe lao tới** | Tăng diện tích khung hình kích hoạt còi nguy cấp | Kích hoạt trong vòng $< 150$ms khi xe tiến nhanh | **Đạt** |
-| **Tỷ lệ báo nhầm liên tục** | Không báo nhầm liên tục trên video tĩnh | Cơ chế Cooldown + Bộ lọc ngưỡng 45% loại bỏ nhiễu | **Đạt** |
+| **Tốc độ khung hình (FPS)** | $\ge 15$ FPS trên smartphone tầm trung | **18 – 26 FPS** `[Đo thật - WebGL Chrome di động Snapdragon 778G]`<br>*(Bản Flutter Native: `[Ước tính, chưa kiểm chứng trên máy thật]`)* | **Đạt trên web, cần đo lại native** |
+| **Độ trễ suy luận (Latency)** | $< 300$ ms | **35 – 65 ms** `[Đo thật - WebGL TF.js]`<br>*(Bản Flutter Native TFLite: `[Ước tính, chưa kiểm chứng trên máy thật]`)* | **Đạt trên web, cần đo lại native** |
+| **Độ phủ nhãn nguy hiểm** | Nhận diện xe máy, ô tô, người, bàn ghế | 100% các lớp vật thể chính được ánh xạ tiếng Việt `[Đo thật - Test suite]` | **Đạt** |
+| **Phát hiện xe lao tới** | Tăng diện tích khung hình kích hoạt còi nguy cấp | Kích hoạt $< 150$ms khi xe tiến nhanh `[Ước tính - Video lab, chưa kiểm chứng phản xạ ngoài phố]` | **Cần kiểm chứng thực tế** |
+| **Tỷ lệ báo nhầm liên tục** | Không báo nhầm liên tục trên video tĩnh | 0 báo nhầm trên video phẳng `[Đo thật - Test suite 100 frames]`; đường phố thực: `[Ước tính, chưa kiểm chứng]` | **Cần đo log CSV thực địa** |
 
 ---
 

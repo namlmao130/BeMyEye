@@ -2,6 +2,14 @@
 **Dự án:** Trợ lý dẫn đường thời gian thực cho người khiếm thị (Be My Eyes VN)  
 **Tình trạng:** Hoàn thiện toàn bộ lộ trình 5 giai đoạn & Sẵn sàng cho nhóm Beta Test  
 
+> [!IMPORTANT]
+> ### TRẠNG THÁI SỐ LIỆU & NGUYÊN TẮC TRUNG THỰC KỸ THUẬT
+> - **Nguyên tắc an toàn:** Tuyệt đối không khẳng định điều chưa đo, không tự bịa số.
+> - **Tình trạng kiểm chứng của các số liệu:**
+>   - Các chỉ số FPS (18-26) và độ trễ (38-65ms): Là `[Đo thật - Web Prototype]` trên trình duyệt Chrome WebGL máy Snapdragon 778G.
+>   - Trên bản Flutter Native Android: Mọi số liệu FPS, độ trễ từng bước và thời lượng pin đều là `[Ước tính, chưa kiểm chứng trên máy thật]`. Ứng dụng đã tích hợp công cụ Benchmark 3 phút xuất file CSV (`benchmark_*.csv`) để người dùng chạy trên thiết bị thật và gửi lại số liệu kiểm chứng.
+>   - Độ chính xác GPS (±3.5m) và thời gian ngắt an toàn (< 60ms): Là `[Ước tính lý thuyết theo thông số kỹ thuật bộ thu GNSS và test suite]`, cần kiểm chứng dưới hẻm sâu và vỉa hè thực tế.
+
 ---
 
 ## 1. TỔNG KẾT HÀNH TRÌNH PHÁT TRIỂN 5 GIAI ĐOẠN

@@ -2,6 +2,14 @@
 **Dự án:** Trợ lý dẫn đường thời gian thực cho người khiếm thị (Be My Eyes VN)  
 **Tình trạng:** Hoàn thành thử nghiệm & Đã tinh chỉnh mã nguồn theo phản hồi  
 
+> [!IMPORTANT]
+> ### TRẠNG THÁI SỐ LIỆU & NGUYÊN TẮC TRUNG THỰC KỸ THUẬT
+> - **Nguyên tắc an toàn con người:** Tuyệt đối không khẳng định điều chưa đo, không tự bịa số.
+> - **Nguồn gốc số liệu trong báo cáo này:**
+>   - Điểm đánh giá Likert (4.3 - 4.8 / 5.0) là `[Đo thật - Nhóm nhỏ 3 người dùng khiếm thị thử nghiệm có bảo hộ, ngày 26/10/2026]`, nhưng là mẫu nhỏ định tính, **chưa kiểm chứng trên diện rộng**.
+>   - Tỷ lệ giảm báo nhầm (24% -> 8%): `[Ước tính trên video gán nhãn thủ công, chưa có file log CSV thực địa kéo dài 30 phút]`.
+>   - Bản Flutter Native Android hiện tại: `[Ước tính, chưa kiểm chứng trên máy thật, cần người dùng chạy trên máy thật và gửi số liệu log CSV]`.
+
 ---
 
 ## 1. TỔNG QUAN THỰC HIỆN
@@ -12,10 +20,10 @@
 ---
 
 ## 2. KẾT QUẢ ĐO LƯỜNG VÀ ĐÁNH GIÁ (METRICS)
-- **Độ hữu ích âm thanh Stereo Pan định hướng:** **4.6 / 5.0** (Người dùng dễ dàng xác định vật cản lệch trái hay phải mà không cần nghe giọng nói dài dòng).
-- **Cứu nguy vật cản tầm đầu/ngực:** **4.8 / 5.0** (Cảnh báo thành công 100% bạt che quán trà đá và cành cây chìa ngang trán — vùng mù mà gậy trắng không bảo vệ được).
-- **Nghe âm thanh giao thông thực tế:** **4.3 / 5.0** (Âm bíp ngắn không làm át tiếng xe máy lưu thông phía sau).
-- **Tỷ lệ giảm thiểu báo nhầm sau tinh chỉnh:** Giảm từ $24\%$ xuống còn **$8\%$** nhờ nâng cấp bộ lọc thời gian 8 frames và bộ lọc vùng mù ngoại vi.
+- **Độ hữu ích âm thanh Stereo Pan định hướng:** **4.6 / 5.0** `[Đo thật - Khảo sát 3 người dùng thử nghiệm nội bộ 26/10/2026; chưa kiểm chứng diện rộng]` (Người dùng dễ dàng xác định vật cản lệch trái hay phải mà không cần nghe giọng nói dài dòng).
+- **Cứu nguy vật cản tầm đầu/ngực:** **4.8 / 5.0** `[Đo thật - Khảo sát 3 người dùng thử nghiệm nội bộ 26/10/2026; chưa kiểm chứng diện rộng]` (Cảnh báo thành công bạt che quán trà đá và cành cây chìa ngang trán trong phạm vi thử nghiệm có người bảo hộ).
+- **Nghe âm thanh giao thông thực tế:** **4.3 / 5.0** `[Đo thật - Khảo sát 3 người dùng 26/10/2026]` (Âm bíp ngắn không làm át tiếng xe máy lưu thông phía sau).
+- **Tỷ lệ giảm thiểu báo nhầm sau tinh chỉnh:** Giảm từ $24\%$ xuống còn **$8\%$** `[Ước tính trên video gắn nhãn thủ công; chưa có log CSV thực địa kéo dài]` nhờ nâng cấp bộ lọc thời gian 8 frames và bộ lọc vùng mù ngoại vi.
 
 ---
 
