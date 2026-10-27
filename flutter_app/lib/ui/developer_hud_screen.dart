@@ -97,7 +97,7 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                   det.activeDelegate,
                   det.activeDelegate == 'LỖI'
                       ? const Color(0xFFEF4444)
-                      : (det.activeDelegate == 'GPU' || det.activeDelegate == 'NNAPI')
+                      : (det.activeDelegate == 'GPU' || det.activeDelegate == 'XNNPACK' || det.activeDelegate == 'NNAPI')
                           ? const Color(0xFF22C55E)
                           : const Color(0xFFFACC15),
                 ),

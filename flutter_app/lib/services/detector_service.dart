@@ -152,13 +152,13 @@ class DetectorService {
         interpreter = null;
       }
 
-      // Thử NNAPI Delegate trên Android nếu GPU thất bại
+      // Thử XNNPack Delegate trên Android nếu GPU thất bại
       if (interpreter == null) {
         try {
-          final nnapiOptions = InterpreterOptions()..threads = 4;
-          nnapiOptions.addDelegate(NnApiDelegate());
-          interpreter = await _interpreterCreator(modelPath, options: nnapiOptions);
-          selectedDelegate = 'NNAPI';
+          final xnnOptions = InterpreterOptions()..threads = 4;
+          xnnOptions.addDelegate(XNNPackDelegate());
+          interpreter = await _interpreterCreator(modelPath, options: xnnOptions);
+          selectedDelegate = 'XNNPACK';
         } catch (_) {
           interpreter = null;
         }
