@@ -1,18 +1,25 @@
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../config/thresholds.dart';
+import '../../models/detection_result.dart';
 import '../../services/audio_haptics_service.dart';
 import '../../services/alert_decision_engine.dart';
 import '../../services/navigation_service.dart';
 import '../../services/detector_service.dart';
+import '../../services/camera_pipeline_service.dart';
 
 /// developer_hud_screen.dart
 /// Màn hình kỹ thuật dành cho Nhà phát triển & Người bảo hộ đi cùng (Sighted Companion Toolbar)
+/// Hiển thị trực tiếp luồng CameraPreview, vẽ Bounding Boxes, hiển thị độ trễ từng giai đoạn,
+/// và công cụ xuất file log CSV để đo đạc thực địa.
 
 class DeveloperHUDScreen extends StatefulWidget {
   final AudioHapticsService audio;
   final AlertDecisionEngine alertEngine;
   final NavigationService navService;
   final DetectorService detectorService;
+  final CameraPipelineService? pipelineService;
 
   const DeveloperHUDScreen({
     Key? key,
@@ -20,6 +27,7 @@ class DeveloperHUDScreen extends StatefulWidget {
     required this.alertEngine,
     required this.navService,
     required this.detectorService,
+    this.pipelineService,
   }) : super(key: key);
 
   @override
@@ -32,10 +40,39 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
   int falseAlarms = 0;
 
   @override
+  void initState() {
+    super.initState();
+    widget.pipelineService?.onFrameProcessed = _onPipelineUpdate;
+  }
+
+  void _onPipelineUpdate() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    if (widget.pipelineService?.onFrameProcessed == _onPipelineUpdate) {
+      widget.pipelineService?.onFrameProcessed = null;
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final navStatus = widget.navService.getStatus();
     final currentThreat = widget.alertEngine.currentThreat;
     final det = widget.detectorService;
+    final pipeline = widget.pipelineService;
+
+    final fpsText = (pipeline != null && pipeline.currentFps > 0)
+        ? pipeline.currentFps.toStringAsFixed(1)
+        : (kPipelineEnabled ? '--' : 'Chưa đo');
+
+    final latencyText = (pipeline != null && pipeline.latencyTotalMs > 0)
+        ? '${pipeline.latencyTotalMs} ms'
+        : (kPipelineEnabled ? '--' : 'Chưa đo');
 
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
@@ -48,35 +85,12 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (!kPipelineEnabled)
-              Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF7F1D1D),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFEF4444)),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.info_outline, color: Color(0xFFFACC15), size: 22),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'BẢN DEMO – CHƯA NHẬN DIỆN CAMERA\nThông số FPS và độ trễ sẽ hiển thị khi chạy pipeline camera thật (NV3).',
-                        style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
             // Bảng HUD thông số thời gian thực
             Row(
               children: [
-                _buildHUDCard('FPS', kPipelineEnabled ? '--' : 'Chưa đo', Colors.white),
+                _buildHUDCard('FPS', fpsText, Colors.white),
                 const SizedBox(width: 8),
-                _buildHUDCard('Độ trễ', kPipelineEnabled ? '--' : 'Chưa đo', Colors.white),
+                _buildHUDCard('Độ trễ tổng', latencyText, Colors.white),
                 const SizedBox(width: 8),
                 _buildHUDCard(
                   'Delegate',
@@ -112,15 +126,141 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                 ),
                 const SizedBox(width: 8),
                 _buildHUDCard(
+                  'Số vật thể',
+                  '${pipeline?.latestDetections.length ?? 0}',
+                  const Color(0xFF38BDF8),
+                ),
+                const SizedBox(width: 8),
+                _buildHUDCard(
                   'Tin cậy AI',
                   '${(det.confidenceThreshold * 100).toInt()}%',
-                  const Color(0xFF38BDF8),
+                  const Color(0xFFFACC15),
                 ),
               ],
             ),
             const SizedBox(height: 14),
 
-            // Mô hình AI On-device & Hardware Acceleration
+            // Khung Camera thật (CameraPreview) + Vẽ Bounding Box & 3 hành lang
+            Container(
+              height: 240,
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF333333)),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (pipeline?.controller != null &&
+                        pipeline!.controller!.value.isInitialized)
+                      CameraPreview(pipeline.controller!)
+                    else
+                      Center(
+                        child: Text(
+                          pipeline != null && pipeline.isStreaming
+                              ? 'Đang khởi động Camera...'
+                              : 'Camera đang tắt\n(Nhấn "BẮT ĐẦU DẪN ĐƯỜNG" ở màn hình chính để kích hoạt luồng camera)',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.white54, fontSize: 13),
+                        ),
+                      ),
+
+                    // Vẽ đường phân chia 3 hành lang (Trái 35% - Giữa 30% - Phải 35%)
+                    CustomPaint(
+                      painter: CorridorOverlayPainter(),
+                    ),
+
+                    // Vẽ các hộp nhận diện (Bounding Boxes) từ mô hình AI
+                    if (pipeline != null && pipeline.latestDetections.isNotEmpty)
+                      CustomPaint(
+                        painter: BoundingBoxPainter(detections: pipeline.latestDetections),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Chi tiết độ trễ từng giai đoạn (Latency Breakdown)
+            if (pipeline != null && pipeline.latencyTotalMs > 0)
+              _buildSection(
+                title: 'Chi tiết thời gian xử lý (Latency Breakdown)',
+                child: Column(
+                  children: [
+                    _buildLatencyRow('1. Tiền xử lý (YUV420 → RGB/Luma Isolate)', '${pipeline.latencyPreprocessMs} ms'),
+                    _buildLatencyRow('2. Suy luận TFLite SSD MobileNet on-device', '${pipeline.latencyInferenceMs} ms'),
+                    _buildLatencyRow('3. Phân tích Không gian & Bậc thềm', '${pipeline.latencyAnalysisMs} ms'),
+                    const Divider(color: Color(0xFF333333)),
+                    _buildLatencyRow('Tổng độ trễ mỗi khung hình (End-to-End)', '${pipeline.latencyTotalMs} ms', isTotal: true),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 14),
+
+            // Công cụ ghi log CSV đo đạc thực địa
+            _buildSection(
+              title: 'Công cụ Đo đạc Thực địa (CSV Logging)',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Số bản ghi CSV hiện có: ${pipeline?.csvLogger.rowCount ?? 0} dòng',
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2563EB),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                          icon: const Icon(Icons.copy, size: 18),
+                          label: const Text('Sao chép CSV'),
+                          onPressed: () {
+                            if (pipeline == null || pipeline.csvLogger.rowCount == 0) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Chưa có dữ liệu CSV nào được ghi!')),
+                              );
+                              return;
+                            }
+                            final csvText = pipeline.csvLogger.exportCsv();
+                            Clipboard.setData(ClipboardData(text: csvText));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Đã sao chép ${pipeline.csvLogger.rowCount} dòng CSV vào bộ nhớ tạm để gửi lại!'),
+                                backgroundColor: const Color(0xFF15803D),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFEF4444),
+                          side: const BorderSide(color: Color(0xFFEF4444)),
+                        ),
+                        onPressed: () {
+                          pipeline?.csvLogger.clear();
+                          setState(() {});
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Đã xóa bộ nhớ log CSV.')),
+                          );
+                        },
+                        child: const Text('Xóa Log'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Cấu hình mô hình AI & Thanh trượt Confidence
             _buildSection(
               title: 'Cấu hình Mô hình Thị giác AI (SSD MobileNet)',
               child: Column(
@@ -179,64 +319,33 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
             ),
             const SizedBox(height: 14),
 
-            // Khung Camera mô phỏng
-            Container(
-              height: 200,
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF333333)),
-              ),
-              child: Stack(
-                children: [
-                  const Center(
-                    child: Text(
-                      'Luồng Camera On-Device (TFLite SSD MobileNet)',
-                      style: TextStyle(color: Colors.white54, fontSize: 13),
-                    ),
-                  ),
-                  // Đường kẻ phân chia 3 hành lang Trái - Giữa - Phải
-                  Positioned.fill(
-                    child: CustomPaint(
-                      painter: CorridorOverlayPainter(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-
             // Thanh công cụ Người bảo hộ đi kèm (Field Testing Toolbar)
             _buildSection(
               title: 'Thanh công cụ Người bảo hộ đi kèm',
-              child: Column(
+              child: Row(
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF15803D)),
-                          onPressed: () => setState(() => goodAlerts++),
-                          child: Text('Cảnh báo tốt ($goodAlerts)'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
-                          onPressed: () => setState(() => missedObstacles++),
-                          child: Text('Bỏ sót ($missedObstacles)'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB45309)),
-                          onPressed: () => setState(() => falseAlarms++),
-                          child: Text('Báo nhầm ($falseAlarms)'),
-                        ),
-                      ),
-                    ],
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF15803D)),
+                      onPressed: () => setState(() => goodAlerts++),
+                      child: Text('Cảnh báo tốt ($goodAlerts)'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+                      onPressed: () => setState(() => missedObstacles++),
+                      child: Text('Bỏ sót ($missedObstacles)'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB45309)),
+                      onPressed: () => setState(() => falseAlarms++),
+                      child: Text('Báo nhầm ($falseAlarms)'),
+                    ),
                   ),
                 ],
               ),
@@ -354,6 +463,35 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
     );
   }
 
+  Widget _buildLatencyRow(String label, String value, {bool isTotal = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: isTotal ? const Color(0xFFFACC15) : Colors.white70,
+                fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: isTotal ? const Color(0xFF22C55E) : Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSection({required String title, required Widget child}) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -373,6 +511,7 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
   }
 }
 
+/// Vẽ 3 hành lang di chuyển (Trái 35% | Giữa 30% | Phải 35%)
 class CorridorOverlayPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -381,12 +520,67 @@ class CorridorOverlayPainter extends CustomPainter {
       ..strokeWidth = 1.5
       ..style = PaintingStyle.stroke;
 
-    // Vạch trái (35%)
     canvas.drawLine(Offset(size.width * 0.35, 0), Offset(size.width * 0.35, size.height), paint);
-    // Vạch phải (65%)
     canvas.drawLine(Offset(size.width * 0.65, 0), Offset(size.width * 0.65, size.height), paint);
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Vẽ các hộp Bounding Box và tên vật thể lên khung Camera
+class BoundingBoxPainter extends CustomPainter {
+  final List<DetectionResult> detections;
+
+  BoundingBoxPainter({required this.detections});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final det in detections) {
+      final bbox = det.bbox;
+      // bbox tọa độ trên khung chuẩn 300x300, scale sang kích thước size thực tế của container
+      final double scaleX = size.width / 300.0;
+      final double scaleY = size.height / 300.0;
+
+      final double x = bbox[0] * scaleX;
+      final double y = bbox[1] * scaleY;
+      final double w = bbox[2] * scaleX;
+      final double h = bbox[3] * scaleY;
+
+      Color boxColor = const Color(0xFF38BDF8); // Mặc định xanh dương
+      if (det.distanceLevel == DistanceLevel.critical) {
+        boxColor = const Color(0xFFEF4444); // Đỏ nguy cấp
+      } else if (det.distanceLevel == DistanceLevel.near) {
+        boxColor = const Color(0xFFF59E0B); // Vàng/cam gần
+      }
+
+      final boxPaint = Paint()
+        ..color = boxColor
+        ..strokeWidth = 2.5
+        ..style = PaintingStyle.stroke;
+
+      final rect = Rect.fromLTWH(x, y, w, h);
+      canvas.drawRect(rect, boxPaint);
+
+      // Nhãn chữ
+      final textSpan = TextSpan(
+        text: '${det.vietnameseLabel} (${(det.score * 100).toInt()}%)',
+        style: TextStyle(
+          color: Colors.white,
+          backgroundColor: boxColor.withOpacity(0.85),
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      );
+      final textPainter = TextPainter(
+        text: textSpan,
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      textPainter.paint(canvas, Offset(x, (y - 14).clamp(0, size.height - 14)));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant BoundingBoxPainter oldDelegate) => true;
 }

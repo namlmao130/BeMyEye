@@ -2,11 +2,13 @@
 **Trợ lý dẫn đường thời gian thực cho người khiếm thị trên đường phố Việt Nam**  
 *(Phiên bản ứng dụng di động Flutter Native)*
 
-> [!WARNING]
-> **THÔNG BÁO VỀ TRẠNG THÁI HIỆN TẠI CỦA DỰ ÁN:**
-> - **Bản Web (`public/`):** Đã hoàn thiện pipeline nhận diện thời gian thực qua webcam/camera trình duyệt bằng TensorFlow.js MobileNet SSD, phân tích không gian 3 hành lang và âm thanh Stereo Web Audio.
-> - **Bản Flutter Native (`flutter_app/`):** Đang trong quá trình hoàn thiện kết nối luồng camera native (Nhiệm vụ 3). Khi cờ `kPipelineEnabled = false`, ứng dụng ở chế độ **"BẢN DEMO – CHƯA NHẬN DIỆN CAMERA"** và sẽ phát giọng nói cảnh báo khi bật. **Tuyệt đối không dùng bản demo để dẫn đường trên đường phố.**
-> - **Hiệu năng & Kiểm chứng:** Mọi thông số về FPS, độ trễ xử lý (ms), tỷ lệ cảnh báo chính xác **chưa được đo đạc thực địa trên thiết bị Android/iOS thật**. Cần chạy trực tiếp trên máy thật và xuất dữ liệu đo (CSV) để thẩm định.
+> [!NOTE]
+> **TIẾN ĐỘ & TRẠNG THÁI HIỆN TẠI (NV3 ĐÃ HOÀN THÀNH):**
+> - **Luồng Camera Native (`kPipelineEnabled = true`):** Đã kết nối luồng Camera thời gian thực (`camera` package, YUV420), tiền xử lý song song trong Isolate (YUV420 → RGB 300×300 cho SSD MobileNet và → Luma 160×120 cho phân tích bậc thềm), điều tiết khung hình bằng `BatteryThermalOptimizer`, tự động bỏ khung hình trễ (Frame-dropping, không xếp hàng).
+> - **Mô hình On-device & Tăng tốc phần cứng:** Nạp mô hình SSD MobileNet với 91 nhãn COCO chuẩn, tự động chọn Hardware Delegate (`GPU Delegate` → `NNAPI` → `CPU đa luồng`). Báo lỗi to bằng giọng nói và khóa dẫn đường nếu không nạp được mô hình.
+> - **Giữ màn hình sáng (`wakelock_plus`) & Giới hạn nền:** Ứng dụng tự động giữ màn hình luôn sáng khi đang dẫn đường để duy trì luồng camera liên tục. Do chính sách bảo mật của Android 9+ hạn chế nghiêm ngặt việc truy cập camera khi màn hình tắt/ứng dụng chạy ngầm, điện thoại được thiết kế để đeo trước ngực với màn hình sáng ở giao diện đen thuần OLED (`#000000`) nhằm tối thiểu hóa tiêu hao pin.
+> - **Công cụ đo đạc thực địa (CSV Logger):** HUD kỹ thuật cung cấp công cụ ghi log FPS, độ trễ từng chặng (`t_preprocess`, `t_inference`, `t_analysis`, `t_total`), mối đe dọa chính và nút một chạm sao chép toàn bộ CSV vào Clipboard để người kiểm thử gửi lại số liệu thẩm định thực tế.
+> - **Mục tiêu hiệu năng cần đo thực địa:** Đích nhắm $\ge 15$ FPS và độ trễ $< 300$ ms trên thiết bị tầm trung. Hiện tại các số liệu này **chưa có số đo thực tế từ thiết bị phần cứng**, cần chạy APK trên máy thật và xuất CSV để kiểm chứng.
 
 ---
 
@@ -14,19 +16,22 @@
 
 ```
 flutter_app/
-├── pubspec.yaml                        # Danh sách dependencies & assets
-├── android/app/src/main/AndroidManifest.xml # Quyền Camera, GPS, Rung
+├── pubspec.yaml                        # Danh sách dependencies (camera, tflite_flutter, wakelock_plus,...)
+├── android/app/src/main/AndroidManifest.xml # Quyền Camera, GPS, Rung, WakeLock
 ├── ios/Runner/Info.plist              # Quyền Camera, Location cho iOS
 └── lib/
     ├── main.dart                      # Điểm khởi chạy & Theme đen OLED
     ├── config/
-    │   └── thresholds.dart            # Toàn bộ ngưỡng cấu hình thuật toán, âm thanh & cờ pipeline
+    │   └── thresholds.dart            # Toàn bộ ngưỡng cấu hình thuật toán, âm thanh & cờ kPipelineEnabled
     ├── models/
     │   ├── detection_result.dart      # Model Bounding Box, 3 hành lang & cự ly
     │   ├── ground_hazard.dart         # Model Bậc tam cấp & Bậc bước xuống (vật cản âm)
     │   └── waypoint.dart              # Model điểm mốc dẫn đường GPS
     ├── services/
-    │   ├── detector_service.dart      # TFLite Interpreter (MobileNet SSD lượng tử hóa)
+    │   ├── detector_service.dart      # TFLite Interpreter (MobileNet SSD 91 nhãn, GPU/NNAPI/CPU Fallback)
+    │   ├── camera_pipeline_service.dart # Điều phối luồng camera, Isolate và chuỗi xử lý
+    │   ├── image_preprocessor.dart    # Biến đổi YUV420 sang RGB 300x300 & Luma 160x120 trong Isolate
+    │   ├── csv_logger.dart            # Ghi nhận log CSV đo đạc thực địa (FPS, Latency Breakdown)
     │   ├── spatial_analyzer.dart      # Phân tích 3 hành lang & tốc độ xe lao tới
     │   ├── ground_analyzer.dart       # Quét Sobel ngang & lọc 8 frames chống rung bước chân
     │   ├── alert_decision_engine.dart # Bộ não ưu tiên hiểm họa, Cooldown & Heartbeat
@@ -35,7 +40,7 @@ flutter_app/
     │   └── battery_optimizer.dart     # Điều tiết FPS động theo chuyển động người dùng
     └── ui/
         ├── accessible_screen.dart     # Giao diện xúc giác 1 nút to cho người khiếm thị
-        ├── developer_hud_screen.dart  # HUD kỹ thuật & Thanh công cụ Người bảo hộ
+        ├── developer_hud_screen.dart  # HUD kỹ thuật, CameraPreview, vẽ Bbox & Xuất CSV
         └── widgets/
             └── safety_disclaimer_dialog.dart # Modal Điều khoản An toàn bắt buộc đọc bằng giọng nói
 ```
@@ -61,15 +66,15 @@ flutter pub get
 2. `assets/models/labelmap.txt` (Từ điển 91 nhãn COCO)
 3. `assets/sounds/beep.wav` (Tệp âm thanh bíp chuẩn hóa)
 
-### Bước 4: Chạy trên thiết bị thật
+### Bước 4: Chạy trên thiết bị thật & Lấy dữ liệu CSV
 Cắm điện thoại vào máy tính qua cáp USB và chạy lệnh:
 ```bash
-# Kiểm tra thiết bị kết nối
-flutter devices
-
-# Chạy ứng dụng trên máy Android / iOS
 flutter run -d <device-id>
 ```
+Khi đang chạy:
+1. Bấm nút **"Màn hình Kỹ thuật & Đo đạc"**.
+2. Xem camera trực tiếp, Bounding Box và bảng thông số độ trễ từng bước.
+3. Bấm **"Sao chép CSV"** để dán toàn bộ dữ liệu đo (thời điểm, FPS, độ trễ tiền xử lý, suy luận, phân tích) gửi lại cho nhóm kỹ sư.
 
 ---
 

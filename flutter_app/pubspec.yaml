@@ -34,6 +34,9 @@ dependencies:
   # Lưu trữ cài đặt & trạng thái chấp thuận điều khoản
   shared_preferences: ^2.3.3
 
+  # Giữ màn hình luôn sáng khi dẫn đường (OLED Black tiết kiệm pin)
+  wakelock_plus: ^1.2.8
+
   # Quản lý quyền truy cập hệ thống (Camera, Vị trí, Micro)
   permission_handler: ^11.3.1
 

@@ -8,9 +8,8 @@
 // ============================================================================
 
 /// Cờ kích hoạt luồng camera thực tế.
-/// Đặt [false] khi đang ở bản Demo / Mockup (chưa có luồng Camera thật).
-/// Sẽ được chuyển sang [true] khi hoàn thành Nhiệm vụ 3 (nối Camera Stream).
-bool kPipelineEnabled = false;
+/// Đặt [true] khi hoàn thành Nhiệm vụ 3 (nối Camera Stream).
+bool kPipelineEnabled = true;
 
 // ============================================================================
 // 2. NGƯỠNG PHÂN TÍCH KHÔNG GIAN (SPATIAL ANALYZER)

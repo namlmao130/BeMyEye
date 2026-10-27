@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'config/thresholds.dart';
 import 'services/audio_haptics_service.dart';
 import 'services/alert_decision_engine.dart';
@@ -8,6 +9,8 @@ import 'services/spatial_analyzer.dart';
 import 'services/ground_analyzer.dart';
 import 'services/detector_service.dart';
 import 'services/battery_optimizer.dart';
+import 'services/csv_logger.dart';
+import 'services/camera_pipeline_service.dart';
 import 'ui/accessible_screen.dart';
 
 void main() async {
@@ -36,6 +39,8 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
   late final GroundPlaneAnalyzer _groundAnalyzer;
   late final DetectorService _detectorService;
   late final BatteryThermalOptimizer _batteryOptimizer;
+  late final CsvLogger _csvLogger;
+  late final CameraPipelineService _cameraPipeline;
 
   bool _isAppActive = false;
 
@@ -49,6 +54,16 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
     _groundAnalyzer = GroundPlaneAnalyzer();
     _detectorService = DetectorService();
     _batteryOptimizer = BatteryThermalOptimizer();
+    _csvLogger = CsvLogger();
+
+    _cameraPipeline = CameraPipelineService(
+      detectorService: _detectorService,
+      spatialAnalyzer: _spatialAnalyzer,
+      groundAnalyzer: _groundAnalyzer,
+      alertEngine: _alertEngine,
+      batteryOptimizer: _batteryOptimizer,
+      csvLogger: _csvLogger,
+    );
 
     _initDetector();
   }
@@ -67,7 +82,7 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
     }
   }
 
-  void _toggleApp() {
+  void _toggleApp() async {
     // Nếu mô hình chưa sẵn sàng hoặc có lỗi, khóa hoàn toàn chức năng dẫn đường
     if (!_detectorService.isReady) {
       _audioService.speakVietnamese(
@@ -82,6 +97,14 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
     });
 
     if (_isAppActive) {
+      // Giữ màn hình luôn sáng bằng WakelockPlus khi dẫn đường
+      try {
+        await WakelockPlus.enable();
+      } catch (_) {}
+
+      // Kích hoạt luồng camera stream
+      await _cameraPipeline.startStream();
+
       if (!kPipelineEnabled) {
         _audioService.speakVietnamese(
           'Bản thử nghiệm, chưa nhận diện camera. Không dùng để dẫn đường thực tế.',
@@ -91,6 +114,12 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
         _audioService.speakVietnamese('Đã bật trợ lý dẫn đường', force: true);
       }
     } else {
+      // Dừng stream camera và giải phóng wakelock
+      await _cameraPipeline.stopStream();
+      try {
+        await WakelockPlus.disable();
+      } catch (_) {}
+
       _audioService.speakVietnamese('Đã tạm dừng', force: true);
       _navService.stopNavigation();
     }
@@ -98,6 +127,10 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
 
   @override
   void dispose() {
+    _cameraPipeline.dispose();
+    try {
+      WakelockPlus.disable();
+    } catch (_) {}
     _audioService.dispose();
     _navService.dispose();
     _detectorService.dispose();
@@ -125,6 +158,7 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
           alertEngine: _alertEngine,
           navService: _navService,
           detectorService: _detectorService,
+          pipelineService: _cameraPipeline,
           isAppActive: _isAppActive,
           onToggleApp: _toggleApp,
         ),

@@ -252,7 +252,9 @@ class DetectorService {
 
       results.add({
         'class': label,
+        'label': label,
         'vietnameseClass': mapping['vi'],
+        'vietnameseLabel': mapping['vi'],
         'category': mapping['category'],
         'priority': mapping['priority'],
         'score': score,

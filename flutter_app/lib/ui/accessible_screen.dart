@@ -4,6 +4,7 @@ import '../../services/audio_haptics_service.dart';
 import '../../services/alert_decision_engine.dart';
 import '../../services/navigation_service.dart';
 import '../../services/detector_service.dart';
+import '../../services/camera_pipeline_service.dart';
 import 'developer_hud_screen.dart';
 import 'widgets/safety_disclaimer_dialog.dart';
 
@@ -17,6 +18,7 @@ class AccessibleScreen extends StatefulWidget {
   final AlertDecisionEngine alertEngine;
   final NavigationService navService;
   final DetectorService detectorService;
+  final CameraPipelineService? pipelineService;
   final bool isAppActive;
   final VoidCallback onToggleApp;
 
@@ -26,6 +28,7 @@ class AccessibleScreen extends StatefulWidget {
     required this.alertEngine,
     required this.navService,
     required this.detectorService,
+    this.pipelineService,
     required this.isAppActive,
     required this.onToggleApp,
   }) : super(key: key);
@@ -234,6 +237,7 @@ class _AccessibleScreenState extends State<AccessibleScreen> {
                               alertEngine: widget.alertEngine,
                               navService: widget.navService,
                               detectorService: widget.detectorService,
+                              pipelineService: widget.pipelineService,
                             ),
                           ),
                         );
