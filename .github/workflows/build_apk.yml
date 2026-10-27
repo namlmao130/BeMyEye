@@ -32,9 +32,10 @@ jobs:
       - name: Configure Android platform
         working-directory: flutter_app
         run: |
-          # 0. Global gradle properties (allow non-unique package names across legacy AARs)
+          # 0. Global gradle properties (allow non-unique package names and bypass strict compileSdk enforcement)
           mkdir -p ~/.gradle
           echo "android.uniquePackageNames=false" >> ~/.gradle/gradle.properties
+          echo "android.dependency.enforceCompileSdk=false" >> ~/.gradle/gradle.properties
           
           # 1. Tái sinh toàn bộ cấu trúc Android & Gradle Wrapper chuẩn Flutter
           rm -rf android

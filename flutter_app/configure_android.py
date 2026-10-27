@@ -171,10 +171,10 @@ subprojects {
     if os.path.exists(props_path):
         with open(props_path, "r", encoding="utf-8") as f:
             props_content = f.read()
-    if "uniquePackageNames" not in props_content:
+    if "enforceCompileSdk" not in props_content:
         with open(props_path, "a", encoding="utf-8") as f:
-            f.write("\norg.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=2G\nandroid.useAndroidX=true\nandroid.enableJetifier=true\nkotlin.jvm.target.validation.mode=warning\nandroid.suppressUnsupportedCompileSdk=36\nandroid.uniquePackageNames=false\n")
-        print("  ✓ Updated android/gradle.properties (JVM args 4G, uniquePackageNames=false)")
+            f.write("\norg.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=2G\nandroid.useAndroidX=true\nandroid.enableJetifier=true\nkotlin.jvm.target.validation.mode=warning\nandroid.suppressUnsupportedCompileSdk=36\nandroid.uniquePackageNames=false\nandroid.dependency.enforceCompileSdk=false\n")
+        print("  ✓ Updated android/gradle.properties (enforceCompileSdk=false, uniquePackageNames=false)")
     else:
         print("  ✓ android/gradle.properties already configured")
 
