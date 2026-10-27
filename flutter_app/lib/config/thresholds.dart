@@ -225,3 +225,11 @@ String kOsrmFootApiBase = 'https://router.project-osrm.org/route/v1/foot';
 /// Thời gian chờ mạng tối đa khi truy vấn OSRM
 /// Đơn vị: Mili-giây (ms). Quá 7 giây sẽ chuyển sang lộ trình dự phòng/ngoại tuyến.
 int kOsrmNetworkTimeoutMs = 7000;
+
+// ============================================================================
+// 8. ĐO HIỆU NĂNG & BENCHMARK THỰC ĐỊA (BENCHMARKING)
+// ============================================================================
+
+/// Thời gian chạy chế độ đo hiệu năng tự động (giây).
+/// Mặc định: 3 phút = 180 giây để đánh giá ổn định nhiệt và giảm sút FPS do thermal throttling.
+const int kBenchmarkDurationSeconds = 180;

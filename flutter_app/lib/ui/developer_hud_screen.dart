@@ -242,15 +242,90 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
 
             // Công cụ ghi log CSV đo đạc thực địa
             _buildSection(
-              title: 'Công cụ Đo đạc Thực địa (CSV Logging)',
+              title: 'Công cụ Đo đạc Thực địa & Benchmark 3 Phút',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: const Color(0xFFF59E0B)),
+                    ),
+                    child: const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.info_outline, color: Color(0xFFF59E0B), size: 18),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'LƯU Ý TRUNG THỰC: Số liệu hiệu năng CẦN ĐO TRÊN MÁY THẬT. '
+                            'Không khẳng định kết quả khi chưa có file log CSV thực địa.',
+                            style: TextStyle(color: Color(0xFFFDE68A), fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   Text(
                     'Số bản ghi CSV hiện có: ${pipeline?.csvLogger.rowCount ?? 0} dòng',
                     style: const TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                   const SizedBox(height: 10),
+                  // Nút Benchmark 3 phút
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: (pipeline?.csvLogger.isBenchmarkRunning ?? false)
+                            ? const Color(0xFFDC2626)
+                            : const Color(0xFF059669),
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                      ),
+                      icon: Icon(
+                        (pipeline?.csvLogger.isBenchmarkRunning ?? false)
+                            ? Icons.timer
+                            : Icons.speed,
+                        size: 20,
+                      ),
+                      label: Text(
+                        (pipeline?.csvLogger.isBenchmarkRunning ?? false)
+                            ? 'Đang đo benchmark: còn ${pipeline?.csvLogger.benchmarkRemainingSeconds}s (Bấm để dừng)'
+                            : 'Bắt đầu đo hiệu năng 3 phút (Xuất CSV)',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: () {
+                        if (pipeline == null) return;
+                        if (pipeline.csvLogger.isBenchmarkRunning) {
+                          pipeline.csvLogger.stopBenchmark();
+                          setState(() {});
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Đã dừng phiên benchmark đo hiệu năng.')),
+                          );
+                        } else {
+                          pipeline.csvLogger.startBenchmark(
+                            durationSeconds: 180,
+                            onComplete: (csvData) {
+                              Clipboard.setData(ClipboardData(text: csvData));
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Đã hoàn thành benchmark 3 phút! Đã sao chép CSV vào bộ nhớ tạm.'),
+                                    backgroundColor: Color(0xFF15803D),
+                                    duration: Duration(seconds: 4),
+                                  ),
+                                );
+                              }
+                            },
+                          );
+                          setState(() {});
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(
