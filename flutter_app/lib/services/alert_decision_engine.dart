@@ -19,6 +19,8 @@ class AlertCandidate {
   final bool isApproaching;
   final bool isNegativeObstacle;
   final bool isHeadLevelHazard;
+  final double confidence;
+  final bool isMediumConfidence;
 
   AlertCandidate({
     required this.id,
@@ -32,6 +34,8 @@ class AlertCandidate {
     this.isApproaching = false,
     this.isNegativeObstacle = false,
     this.isHeadLevelHazard = false,
+    this.confidence = 1.0,
+    this.isMediumConfidence = false,
   });
 }
 
@@ -102,6 +106,7 @@ class AlertDecisionEngine {
 
     // 3. Hiểm họa mặt đất (Bậc tam cấp / Lề đường)
     for (final gh in groundHazards) {
+      final bool isMedium = gh.confidence < 0.80 || gh.vietnameseName.contains('Có thể');
       candidates.add(AlertCandidate(
         id: 'ground_${gh.type.name}_${(gh.normalizedY * 100).toInt()}',
         label: gh.type.name,
@@ -112,6 +117,8 @@ class AlertDecisionEngine {
         distanceLevel: gh.distanceLevel,
         approximateDistanceMeters: gh.distanceMeters,
         isNegativeObstacle: gh.isNegativeObstacle,
+        confidence: gh.confidence,
+        isMediumConfidence: isMedium,
       ));
     }
 
@@ -177,8 +184,8 @@ class AlertDecisionEngine {
       score += 15;
     }
 
-    // Hiểm họa đặc biệt: Bậc bước xuống / mép lề đường (Vật cản âm)
-    if (c.isNegativeObstacle) score += 170;
+    // Hiểm họa đặc biệt: Bậc bước xuống / mép lề đường (Vật cản âm độ tin cậy cao)
+    if (c.isNegativeObstacle && !c.isMediumConfidence) score += 170;
 
     // Xe máy lao tới
     if (c.isApproaching) score += 160;
@@ -186,8 +193,15 @@ class AlertDecisionEngine {
     // Vật cản tầm đầu / bạt che
     if (c.isHeadLevelHazard) score += 130;
 
-    // Bậc tam cấp bước lên
-    if (c.category == 'ground_hazard' && !c.isNegativeObstacle) score += 85;
+    // Hiểm họa mặt đất (bậc thềm, lề đường bước lên hoặc độ tin cậy trung bình)
+    if (c.category == 'ground_hazard' && !c.isNegativeObstacle) {
+      if (c.isMediumConfidence) {
+        // Cảnh báo ground_hazard độ tin cậy trung bình KHÔNG ĐƯỢC VƯỢT xe hoặc người ở mức near
+        score += kMediumGroundHazardThreatBonus;
+      } else {
+        score += kHighGroundHazardThreatBonus;
+      }
+    }
 
     // Phương tiện & Người
     if (c.category == 'vehicle') {

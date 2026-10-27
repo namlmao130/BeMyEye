@@ -117,6 +117,13 @@ int kGroundMediumConfidenceHits = 3;
 /// Số khung hình trong cửa sổ trượt lọc nhiễu thời gian (chống rung bước chân)
 int kGroundHistorySize = 8;
 
+/// Điểm ưu tiên cộng thêm cho hiểm họa mặt đất độ tin cậy cao (bậc bước lên)
+int kHighGroundHazardThreatBonus = 85;
+
+/// Điểm ưu tiên cộng thêm cho hiểm họa mặt đất độ tin cậy trung bình (báo dùng gậy kiểm tra)
+/// Được định cấu hình là 10 để tổng điểm ở cự ly near (100) không vượt qua người (105) hoặc xe (125).
+int kMediumGroundHazardThreatBonus = 10;
+
 // ============================================================================
 // 4. NGƯỠNG ÂM THANH & CẢNH BÁO (AUDIO & ALERT ENGINE)
 // ============================================================================
