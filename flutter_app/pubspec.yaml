@@ -57,3 +57,7 @@ flutter:
     - assets/models/labelmap.txt
     - assets/models/mobilenet_ssd.tflite
     - assets/sounds/
+    - assets/sounds/beep.wav
+    - assets/sounds/beep_left.wav
+    - assets/sounds/beep_center.wav
+    - assets/sounds/beep_right.wav

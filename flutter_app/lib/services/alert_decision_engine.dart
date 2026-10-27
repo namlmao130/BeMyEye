@@ -217,32 +217,52 @@ class AlertDecisionEngine {
   /// Phát âm thanh bíp định hướng và rung xúc giác theo chu kỳ
   void _playBeepAndHaptic(AlertCandidate threat) {
     if (threat.isNegativeObstacle) {
-      audio.playDirectionalBeep(pan: 0.0, pitch: 320, durationMs: 110);
+      audio.playDirectionalBeep(
+        pan: 0.0,
+        pitch: 320,
+        durationMs: 110,
+        direction: DirectionZone.center,
+      );
       audio.triggerHaptic(HapticIntensity.critical);
       return;
     }
 
     if (threat.category == 'ground_hazard') {
-      audio.playDirectionalBeep(pan: 0.0, pitch: 480, durationMs: 80);
+      audio.playDirectionalBeep(
+        pan: 0.0,
+        pitch: 480,
+        durationMs: 80,
+        direction: DirectionZone.center,
+      );
       audio.triggerHaptic(HapticIntensity.near);
       return;
     }
 
     if (threat.isHeadLevelHazard) {
-      audio.playDirectionalBeep(pan: threat.panValue, pitch: 1100, durationMs: 75);
+      audio.playDirectionalBeep(
+        pan: threat.panValue,
+        pitch: 1100,
+        durationMs: 75,
+        direction: threat.direction,
+      );
       audio.triggerHaptic(HapticIntensity.critical);
       return;
     }
 
-    int pitch = 440;
-    if (threat.distanceLevel == DistanceLevel.critical) {
-      pitch = 980;
-    } else if (threat.distanceLevel == DistanceLevel.near) {
-      pitch = 680;
+    int pitch = 750;
+    if (threat.direction == DirectionZone.left) {
+      pitch = 500;
+    } else if (threat.direction == DirectionZone.right) {
+      pitch = 1000;
     }
 
     final int duration = threat.distanceLevel == DistanceLevel.critical ? 80 : 50;
-    audio.playDirectionalBeep(pan: threat.panValue, pitch: pitch, durationMs: duration);
+    audio.playDirectionalBeep(
+      pan: threat.panValue,
+      pitch: pitch,
+      durationMs: duration,
+      direction: threat.direction,
+    );
 
     if (threat.distanceLevel == DistanceLevel.critical || threat.isApproaching) {
       audio.triggerHaptic(HapticIntensity.critical);

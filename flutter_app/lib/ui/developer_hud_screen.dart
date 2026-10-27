@@ -487,30 +487,97 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
             ),
             const SizedBox(height: 14),
 
-            // Thử nghiệm âm thanh Stereo Pan
+            // Thử nghiệm & Kiểm tra âm thanh Stereo Pan (NV8 - Lỗi 7)
             _buildSection(
-              title: 'Thử nghiệm âm thanh Stereo Pan',
-              child: Row(
+              title: 'Kiểm tra Tai nghe & Âm thanh Định hướng (NV8)',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => widget.audio.playDirectionalBeep(pan: -0.85, pitch: 600),
-                      child: const Text('Bíp Trái'),
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Đảo kênh L/R (khi đeo ngược tai):',
+                        style: TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                      Switch(
+                        value: widget.audio.isChannelsSwapped,
+                        activeColor: const Color(0xFF38BDF8),
+                        onChanged: (val) {
+                          setState(() {
+                            widget.audio.isChannelsSwapped = val;
+                          });
+                        },
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => widget.audio.playDirectionalBeep(pan: 0.0, pitch: 750),
-                      child: const Text('Bíp Giữa'),
+                  if (widget.audio.lastPlayedAsset.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        'File âm thanh vừa phát: ${widget.audio.lastPlayedAsset}',
+                        style: const TextStyle(color: Color(0xFFFACC15), fontSize: 11),
+                      ),
                     ),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0D9488),
+                      minimumSize: const Size.fromHeight(40),
+                    ),
+                    icon: const Icon(Icons.headphones, size: 18),
+                    label: const Text('Quy trình Kiểm tra Tai nghe (L -> Center -> R)'),
+                    onPressed: () {
+                      widget.audio.runEarphoneCheckSequence();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Đang phát chu kỳ kiểm tra tai nghe Trái/Giữa/Phải...')),
+                      );
+                    },
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => widget.audio.playDirectionalBeep(pan: 0.85, pitch: 900),
-                      child: const Text('Bíp Phải'),
-                    ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            widget.audio.playDirectionalBeep(
+                              pan: -1.0,
+                              pitch: 500,
+                              direction: DirectionZone.left,
+                            );
+                            setState(() {});
+                          },
+                          child: const Text('Trái (500Hz)'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            widget.audio.playDirectionalBeep(
+                              pan: 0.0,
+                              pitch: 750,
+                              direction: DirectionZone.center,
+                            );
+                            setState(() {});
+                          },
+                          child: const Text('Giữa (750Hz)'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            widget.audio.playDirectionalBeep(
+                              pan: 1.0,
+                              pitch: 1000,
+                              direction: DirectionZone.right,
+                            );
+                            setState(() {});
+                          },
+                          child: const Text('Phải (1000Hz)'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
