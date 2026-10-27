@@ -46,6 +46,18 @@ jobs:
           
           # 3. Tải toàn bộ packages
           flutter pub get
+          
+          # 4. Vá các thư viện bên thứ 3 (tflite_flutter, ...) nâng compileSdkVersion lên 36
+          python3 -c "
+          import glob, re, os
+          cache_dir = os.path.expanduser('~/.pub-cache/hosted/pub.dev')
+          for f in glob.glob(os.path.join(cache_dir, '**/android/build.gradle'), recursive=True):
+              with open(f, 'r') as fp: c = fp.read()
+              new_c = re.sub(r'compileSdkVersion\s+\d+', 'compileSdkVersion 36', c)
+              if new_c != c:
+                  with open(f, 'w') as fp: fp.write(new_c)
+                  print('Patched compileSdkVersion to 36 in:', f)
+          "
 
       - name: Flutter Analyze (Code Quality Check)
         working-directory: flutter_app

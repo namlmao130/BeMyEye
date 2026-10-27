@@ -3,10 +3,8 @@ allprojects {
         google()
         mavenCentral()
     }
-    tasks.whenTaskAdded { task ->
-        if (task.name.contains("AarMetadata")) {
-            task.enabled = false
-        }
+    tasks.matching { it.name.contains("AarMetadata") }.configureEach {
+        enabled = false
     }
 }
 
@@ -20,6 +18,12 @@ subprojects {
 
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
+}
+
+subprojects {
+    tasks.matching { it.name.contains("AarMetadata") }.configureEach {
+        enabled = false
+    }
 }
 
 // Force Java 17 and compileSdkVersion 36 across all plugins and subprojects

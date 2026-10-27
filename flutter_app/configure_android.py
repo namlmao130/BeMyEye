@@ -100,10 +100,14 @@ def configure():
         subprojects_block = """
 // Disable checkAarMetadata tasks that fail when third-party plugins use older compileSdk
 allprojects {
-    tasks.whenTaskAdded { task ->
-        if (task.name.contains("AarMetadata")) {
-            task.enabled = false
-        }
+    tasks.matching { it.name.contains("AarMetadata") }.configureEach {
+        enabled = false
+    }
+}
+
+subprojects {
+    tasks.matching { it.name.contains("AarMetadata") }.configureEach {
+        enabled = false
     }
 }
 
