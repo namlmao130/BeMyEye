@@ -10,7 +10,7 @@ import '../../services/detector_service.dart';
 import '../../services/camera_pipeline_service.dart';
 
 /// developer_hud_screen.dart
-/// Màn hình kỹ thuật dành cho Nhà phát triển & Người bảo hộ đi cùng (Sighted Companion Toolbar)
+/// Màn hình kỹ thuật dành cho Nhà phát triển (Developer HUD)
 /// Hiển thị trực tiếp luồng CameraPreview, vẽ Bounding Boxes, hiển thị độ trễ từng giai đoạn,
 /// và công cụ xuất file log CSV để đo đạc thực địa.
 
@@ -35,10 +35,6 @@ class DeveloperHUDScreen extends StatefulWidget {
 }
 
 class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
-  int goodAlerts = 0;
-  int missedObstacles = 0;
-  int falseAlarms = 0;
-
   @override
   void initState() {
     super.initState();
@@ -625,37 +621,6 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                         child: const Text('Mát mẻ (None 0)'),
                       ),
                     ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-            _buildSection(
-              title: 'Thanh công cụ Người bảo hộ đi kèm',
-              child: Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF15803D)),
-                      onPressed: () => setState(() => goodAlerts++),
-                      child: Text('Cảnh báo tốt ($goodAlerts)'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
-                      onPressed: () => setState(() => missedObstacles++),
-                      child: Text('Bỏ sót ($missedObstacles)'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB45309)),
-                      onPressed: () => setState(() => falseAlarms++),
-                      child: Text('Báo nhầm ($falseAlarms)'),
-                    ),
                   ),
                 ],
               ),

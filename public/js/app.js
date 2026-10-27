@@ -418,15 +418,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  btnMarkMiss.addEventListener('click', () => {
-    const count = metricsLogger.markMissedObstacle();
-    btnMarkMiss.textContent = `Bỏ sót vật cản (${count})`;
-  });
+  if (btnMarkMiss) {
+    btnMarkMiss.addEventListener('click', () => {
+      const count = metricsLogger.markMissedObstacle();
+      btnMarkMiss.textContent = `Bỏ sót vật cản (${count})`;
+    });
+  }
 
-  btnMarkFalse.addEventListener('click', () => {
-    const count = metricsLogger.markFalseAlarm();
-    btnMarkFalse.textContent = `Báo nhầm (${count})`;
-  });
+  if (btnMarkFalse) {
+    btnMarkFalse.addEventListener('click', () => {
+      const count = metricsLogger.markFalseAlarm();
+      btnMarkFalse.textContent = `Báo nhầm (${count})`;
+    });
+  }
 
   // Nút thử nghiệm âm thanh Stereo
   document.getElementById('btn-test-sound-left').addEventListener('click', () => {

@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:math';
 import '../config/thresholds.dart';
 
@@ -60,7 +61,7 @@ class CsvLogger {
   static const String csvHeader =
       'timestamp,fps,latency_preprocess_ms,latency_inference_ms,latency_analysis_ms,latency_total_ms,object_count,primary_threat,threat_direction,threat_distance,delegate,battery_level,thermal_status';
 
-  final List<CsvLogEntry> _entries = [];
+  final ListQueue<CsvLogEntry> _entries = ListQueue<CsvLogEntry>();
   static const int maxEntries = 5000;
 
   // Trạng thái chế độ Benchmark đo hiệu năng 3 phút
@@ -71,7 +72,7 @@ class CsvLogger {
   void Function(String csvData)? onBenchmarkComplete;
 
   int get rowCount => _entries.length;
-  List<CsvLogEntry> get entries => List.unmodifiable(_entries);
+  List<CsvLogEntry> get entries => _entries.toList(growable: false);
   List<CsvLogEntry> get benchmarkEntries => List.unmodifiable(_benchmarkEntries);
 
   int get benchmarkElapsedSeconds {
@@ -135,7 +136,7 @@ class CsvLogger {
     );
 
     if (_entries.length >= maxEntries) {
-      _entries.removeAt(0);
+      _entries.removeFirst();
     }
     _entries.add(entry);
 
@@ -153,7 +154,7 @@ class CsvLogger {
   }
 
   /// Tính toán số liệu thống kê trung thực từ dữ liệu Benchmark
-  Map<String, dynamic> computeBenchmarkStats([List<CsvLogEntry>? customList]) {
+  Map<String, dynamic> computeBenchmarkStats([Iterable<CsvLogEntry>? customList]) {
     final list = customList ?? (isBenchmarkRunning ? _benchmarkEntries : _entries);
     if (list.isEmpty) {
       return {
