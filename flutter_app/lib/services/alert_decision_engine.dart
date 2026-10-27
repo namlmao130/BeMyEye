@@ -272,8 +272,8 @@ class AlertDecisionEngine {
       speechPriority = 210;
     } else if (threat.category == 'ground_hazard') {
       if (threat.distanceLevel != DistanceLevel.far) {
-        text = 'Có bậc bước lên';
-        speechKey = 'step_up';
+        text = threat.vietnameseLabel;
+        speechKey = 'ground_${threat.label}';
         speechPriority = 120;
       }
     } else if (threat.distanceLevel == DistanceLevel.critical &&

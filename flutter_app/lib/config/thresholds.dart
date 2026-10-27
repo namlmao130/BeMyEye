@@ -82,6 +82,18 @@ double kMinStepWidthRatio = 0.35;
 /// Ngưỡng đạo hàm Sobel Gy để xác định cạnh ngang
 int kEdgeThreshold = 38;
 
+/// Số lượng chuyển đổi cạnh tối đa trong 1 hàng (quá số này coi là vạch qua đường / gạch lát)
+int kMaxCrosswalkTransitions = 4;
+
+/// Tỷ lệ tính nhất quán bước sáng/tối dọc theo mép bậc (0.0 -> 1.0)
+double kStepConsistencyRatio = 0.70;
+
+/// Số khung hình trùng khớp tối thiểu để xác nhận bậc mức tin cậy cao (High Confidence)
+int kGroundHighConfidenceHits = 5;
+
+/// Số khung hình trùng khớp tối thiểu để xác nhận bậc mức tin cậy trung bình (Medium Confidence)
+int kGroundMediumConfidenceHits = 3;
+
 /// Số khung hình trong cửa sổ trượt lọc nhiễu thời gian (chống rung bước chân)
 int kGroundHistorySize = 8;
 
