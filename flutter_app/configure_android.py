@@ -147,27 +147,131 @@ subprojects {
 
     # 4. Update AndroidManifest.xml
     manifest_path = os.path.join(android_dir, "app", "src", "main", "AndroidManifest.xml")
-    if os.path.exists(manifest_path):
-        with open(manifest_path, "r", encoding="utf-8") as f:
-            manifest = f.read()
+    manifest_content = """<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-        permissions = """
+    <!-- Quyền thiết yếu cho thị giác máy tính và dẫn đường on-device (NV10) -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
+    <uses-feature android:name="android.hardware.camera" android:required="true" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.compass" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" />
+
+    <application
+        android:label="Be My Eyes VN"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+</manifest>
 """
-        if "android.permission.CAMERA" not in manifest:
-            manifest = manifest.replace("<application", permissions.strip() + "\n\n    <application", 1)
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                f.write(manifest)
-            print("  ✓ Injected permissions into AndroidManifest.xml")
-        else:
-            print("  ✓ Permissions already present in AndroidManifest.xml")
-    else:
-        print("  ! AndroidManifest.xml not found!")
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        f.write(manifest_content)
+    print("  ✓ Wrote AndroidManifest.xml with NV10 permissions and hardware features")
+
+    # 4b. Update MainActivity.kt with Platform Channel (NV9)
+    main_activity_dir = os.path.join(android_dir, "app", "src", "main", "kotlin", "com", "bemyeye", "bemyeye_vn")
+    os.makedirs(main_activity_dir, exist_ok=True)
+    main_activity_path = os.path.join(main_activity_dir, "MainActivity.kt")
+    main_activity_content = """package com.bemyeye.bemyeye_vn
+
+import android.content.Context
+import android.os.BatteryManager
+import android.os.Build
+import android.os.PowerManager
+import androidx.annotation.NonNull
+import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
+
+class MainActivity: FlutterActivity() {
+    private val CHANNEL = "com.bemyeye/device_health"
+
+    override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getDeviceHealth" -> {
+                    val healthData = getDeviceHealth()
+                    result.success(healthData)
+                }
+                "getBatteryLevel" -> {
+                    result.success(getBatteryLevel())
+                }
+                "getThermalStatus" -> {
+                    result.success(getThermalStatus())
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun getBatteryLevel(): Int {
+        return try {
+            val bm = getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+            bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
+        } catch (e: Exception) {
+            -1
+        }
+    }
+
+    private fun getThermalStatus(): Int {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                pm?.currentThermalStatus ?: 0
+            } else {
+                0
+            }
+        } catch (e: Exception) {
+            0
+        }
+    }
+
+    private fun getDeviceHealth(): Map<String, Any> {
+        val battery = getBatteryLevel()
+        val thermal = getThermalStatus()
+        val isThrottling = thermal >= 3 // 3 = THERMAL_STATUS_SEVERE
+        return mapOf(
+            "batteryLevel" to battery,
+            "thermalStatus" to thermal,
+            "isThermalThrottling" to isThrottling
+        )
+    }
+}
+"""
+    with open(main_activity_path, "w", encoding="utf-8") as f:
+        f.write(main_activity_content)
+    print("  ✓ Wrote MainActivity.kt with device health platform channel (NV9)")
 
     # 5. Update gradle.properties
     props_path = os.path.join(android_dir, "gradle.properties")
