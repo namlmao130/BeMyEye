@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../config/thresholds.dart';
 import '../../services/audio_haptics_service.dart';
 import '../../services/alert_decision_engine.dart';
 import '../../services/navigation_service.dart';
@@ -43,12 +44,35 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (!kPipelineEnabled)
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF7F1D1D),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFEF4444)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Color(0xFFFACC15), size: 22),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'BẢN DEMO – CHƯA NHẬN DIỆN CAMERA\nThông số FPS và độ trễ sẽ hiển thị khi chạy pipeline camera thật (NV3).',
+                        style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             // Bảng HUD thông số thời gian thực
             Row(
               children: [
-                _buildHUDCard('FPS', '21.4', Colors.white),
+                _buildHUDCard('FPS', kPipelineEnabled ? '--' : 'Chưa đo', Colors.white),
                 const SizedBox(width: 8),
-                _buildHUDCard('Độ trễ', '42 ms', Colors.white),
+                _buildHUDCard('Độ trễ', kPipelineEnabled ? '--' : 'Chưa đo', Colors.white),
                 const SizedBox(width: 8),
                 _buildHUDCard(
                   'Mối nguy',

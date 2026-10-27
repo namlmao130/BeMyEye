@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../config/thresholds.dart';
 import '../../services/audio_haptics_service.dart';
 import '../../services/alert_decision_engine.dart';
 import '../../services/navigation_service.dart';
@@ -56,6 +57,39 @@ class _AccessibleScreenState extends State<AccessibleScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              // Cảnh báo bản thử nghiệm (chỉ hiển thị khi pipeline camera chưa hoạt động)
+              if (!kPipelineEnabled)
+                Semantics(
+                  liveRegion: true,
+                  child: Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF7F1D1D), // Đỏ đậm cảnh báo
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFEF4444), width: 2),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.warning_amber_rounded, color: Color(0xFFFACC15), size: 28),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'BẢN DEMO – CHƯA NHẬN DIỆN CAMERA\nKhông dùng để dẫn đường thực tế!',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              height: 1.3,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
               // Thanh thông báo hướng dẫn
               Semantics(
                 liveRegion: true,

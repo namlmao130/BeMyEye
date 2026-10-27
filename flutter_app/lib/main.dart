@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'config/thresholds.dart';
 import 'services/audio_haptics_service.dart';
 import 'services/alert_decision_engine.dart';
 import 'services/navigation_service.dart';
@@ -59,7 +60,14 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
     });
 
     if (_isAppActive) {
-      _audioService.speakVietnamese('Đã bật trợ lý dẫn đường', force: true);
+      if (!kPipelineEnabled) {
+        _audioService.speakVietnamese(
+          'Bản thử nghiệm, chưa nhận diện camera. Không dùng để dẫn đường thực tế.',
+          force: true,
+        );
+      } else {
+        _audioService.speakVietnamese('Đã bật trợ lý dẫn đường', force: true);
+      }
     } else {
       _audioService.speakVietnamese('Đã tạm dừng', force: true);
       _navService.stopNavigation();
