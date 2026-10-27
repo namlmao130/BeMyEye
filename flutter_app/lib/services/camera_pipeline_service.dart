@@ -11,6 +11,7 @@ import 'battery_optimizer.dart';
 import 'csv_logger.dart';
 import 'image_preprocessor.dart';
 import 'tilt_calibration_service.dart';
+import 'device_health_service.dart';
 
 /// camera_pipeline_service.dart
 /// Trực tiếp điều khiển luồng Camera thời gian thực, điều tiết khung hình,
@@ -24,6 +25,7 @@ class CameraPipelineService {
   final BatteryThermalOptimizer batteryOptimizer;
   final CsvLogger csvLogger;
   final TiltCalibrationService? tiltService;
+  final DeviceHealthService? healthService;
 
   CameraController? _cameraController;
   CameraController? get controller => _cameraController;
@@ -45,6 +47,7 @@ class CameraPipelineService {
 
   List<DetectionResult> latestDetections = [];
   List<GroundHazard> latestGroundHazards = [];
+  List<GroundHazard> _cachedGroundHazards = [];
   AlertCandidate? currentThreat;
 
   VoidCallback? onFrameProcessed;
@@ -61,6 +64,7 @@ class CameraPipelineService {
     required this.batteryOptimizer,
     required this.csvLogger,
     this.tiltService,
+    this.healthService,
   });
 
   /// Khởi tạo camera với cấu hình tối ưu độ trễ và năng lượng
@@ -170,6 +174,23 @@ class CameraPipelineService {
   /// Thực thi toàn bộ chuỗi Pipeline: Preprocess -> Inference -> Spatial -> Ground -> Alert
   Future<void> _executePipeline(CameraFrameData frameData, int frameStartTime) async {
     try {
+      // Cập nhật thông số pin và nhiệt độ nếu có DeviceHealthService
+      if (healthService != null) {
+        batteryOptimizer.updateBatteryAndThermal(
+          batteryLevel: healthService!.batteryLevel,
+          thermalStatus: healthService!.thermalStatus,
+        );
+      }
+
+      // Phát cảnh báo bằng giọng nói khi thiết bị quá nhiệt (Thermal Throttling)
+      if (batteryOptimizer.shouldAnnounceThermalWarning(frameStartTime)) {
+        alertEngine.audio.speakVietnamese(
+          'Thiết bị quá nhiệt, giảm tốc độ xử lý',
+          force: true,
+          priority: 250,
+        );
+      }
+
       // BƯỚC 1: Tiền xử lý ảnh trong Isolate
       final preprocessed = await compute(preprocessCameraFrame, frameData);
       final int tPreprocessDone = DateTime.now().millisecondsSinceEpoch;
@@ -198,11 +219,18 @@ class CameraPipelineService {
       );
 
       // BƯỚC 4: Phân tích mặt đất & bậc thềm (Ground Plane Luminance Analysis)
-      final groundHazards = groundAnalyzer.analyzeLuminance(
-        preprocessed.luma160,
-        160,
-        120,
-      );
+      // Khi Pin < 20% hoặc Quá nhiệt: giãn chu kỳ phân tích còn 1 lần/giây để tiết kiệm vi xử lý
+      final List<GroundHazard> groundHazards;
+      if (batteryOptimizer.shouldProcessGroundPlane(frameStartTime)) {
+        groundHazards = groundAnalyzer.analyzeLuminance(
+          preprocessed.luma160,
+          160,
+          120,
+        );
+        _cachedGroundHazards = groundHazards;
+      } else {
+        groundHazards = _cachedGroundHazards;
+      }
 
       // BƯỚC 5: Quyết định cảnh báo âm thanh & xúc giác (Alert Decision Engine)
       final threat = alertEngine.process(
@@ -241,6 +269,8 @@ class CameraPipelineService {
         threatDirection: threat?.direction.name ?? 'None',
         threatDistance: threat?.approximateDistanceMeters ?? 'None',
         delegate: detectorService.activeDelegate,
+        batteryLevel: batteryOptimizer.batteryLevel,
+        thermalStatus: batteryOptimizer.thermalStatus,
       );
 
       onFrameProcessed?.call();

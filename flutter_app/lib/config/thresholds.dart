@@ -149,3 +149,25 @@ int kFpsWalking = 22;
 
 /// Tốc độ khung hình mục tiêu khi đứng yên (hạ FPS để hạ nhiệt và tiết kiệm pin)
 int kFpsStanding = 10;
+
+/// Ngưỡng pin yếu cần kích hoạt chế độ tiết kiệm năng lượng
+/// Đơn vị: Phần trăm (%) (pin < 20% thì kích hoạt).
+int kLowBatteryPercent = 20;
+
+/// Tốc độ khung hình mục tiêu khi pin yếu (< 20%)
+int kFpsLowBattery = 10;
+
+/// Chu kỳ tối thiểu giữa các lần phân tích mặt đất khi pin yếu hoặc quá nhiệt
+/// Đơn vị: Mili-giây (ms). Giãn chu kỳ còn 1 lần/giây (1000ms) để giảm tải vi xử lý.
+int kGroundIntervalLowBatteryMs = 1000;
+
+/// Ngưỡng mã trạng thái nhiệt độ bắt đầu throttling nghiêm trọng của Android
+/// Android PowerManager: THERMAL_STATUS_SEVERE = 3, CRITICAL = 4, EMERGENCY = 5, SHUTDOWN = 6
+int kThermalStatusSevere = 3;
+
+/// Tốc độ khung hình mục tiêu khi thiết bị bị quá nhiệt (Thermal Throttling)
+int kFpsThermalThrottling = 8;
+
+/// Thời gian giãn cách tối thiểu giữa 2 lần phát cảnh báo giọng nói về quá nhiệt
+/// Đơn vị: Mili-giây (ms). 15 giây/lần để tránh nói liên tục.
+int kThermalWarningCooldownMs = 15000;

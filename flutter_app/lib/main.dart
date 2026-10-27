@@ -12,6 +12,7 @@ import 'services/battery_optimizer.dart';
 import 'services/csv_logger.dart';
 import 'services/camera_pipeline_service.dart';
 import 'services/tilt_calibration_service.dart';
+import 'services/device_health_service.dart';
 import 'ui/accessible_screen.dart';
 
 void main() async {
@@ -42,6 +43,7 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
   late final BatteryThermalOptimizer _batteryOptimizer;
   late final CsvLogger _csvLogger;
   late final TiltCalibrationService _tiltService;
+  late final DeviceHealthService _healthService;
   late final CameraPipelineService _cameraPipeline;
 
   bool _isAppActive = false;
@@ -58,6 +60,7 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
     _batteryOptimizer = BatteryThermalOptimizer();
     _csvLogger = CsvLogger();
     _tiltService = TiltCalibrationService();
+    _healthService = DeviceHealthService()..startPeriodicPolling();
 
     _cameraPipeline = CameraPipelineService(
       detectorService: _detectorService,
@@ -67,6 +70,7 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
       batteryOptimizer: _batteryOptimizer,
       csvLogger: _csvLogger,
       tiltService: _tiltService,
+      healthService: _healthService,
     );
 
     _initDetector();
@@ -131,6 +135,7 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
 
   @override
   void dispose() {
+    _healthService.dispose();
     _cameraPipeline.dispose();
     _tiltService.dispose();
     try {

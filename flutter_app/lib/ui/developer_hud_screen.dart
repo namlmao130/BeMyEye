@@ -138,6 +138,47 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+
+            Row(
+              children: [
+                _buildHUDCard(
+                  'Mức Pin',
+                  '${pipeline?.batteryOptimizer.batteryLevel ?? 100}%',
+                  (pipeline?.batteryOptimizer.isLowBattery ?? false)
+                      ? const Color(0xFFEF4444)
+                      : const Color(0xFF22C55E),
+                ),
+                const SizedBox(width: 8),
+                _buildHUDCard(
+                  'Nhiệt độ máy',
+                  pipeline?.healthService?.thermalStatusText ?? 'Bình thường',
+                  (pipeline?.batteryOptimizer.isOverheated ?? false)
+                      ? const Color(0xFFEF4444)
+                      : const Color(0xFF38BDF8),
+                ),
+                const SizedBox(width: 8),
+                _buildHUDCard(
+                  'FPS Mục tiêu',
+                  '${pipeline?.batteryOptimizer.targetFPS ?? 22} fps',
+                  const Color(0xFFFACC15),
+                ),
+                const SizedBox(width: 8),
+                _buildHUDCard(
+                  'Chế độ tải',
+                  (pipeline?.batteryOptimizer.isOverheated ?? false)
+                      ? 'QUÁ NHIỆT'
+                      : (pipeline?.batteryOptimizer.isLowBattery ?? false)
+                          ? 'TIẾT KIỆM'
+                          : (pipeline?.batteryOptimizer.userMovementState == 'standing' ? 'ĐỨNG YÊN' : 'BƯỚC ĐI'),
+                  (pipeline?.batteryOptimizer.isOverheated ?? false)
+                      ? const Color(0xFFEF4444)
+                      : (pipeline?.batteryOptimizer.isLowBattery ?? false)
+                          ? const Color(0xFFFACC15)
+                          : const Color(0xFF22C55E),
+                ),
+              ],
+            ),
             const SizedBox(height: 14),
 
             // Khung Camera thật (CameraPreview) + Vẽ Bounding Box & 3 hành lang
@@ -401,7 +442,91 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
             ),
             const SizedBox(height: 14),
 
-            // Thanh công cụ Người bảo hộ đi kèm (Field Testing Toolbar)
+            // Hiệu chuẩn Năng lượng & Quá nhiệt thực tế (NV9)
+            _buildSection(
+              title: 'Điều tiết Năng lượng & Nhiệt độ thực tế (NV9)',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Trạng thái pin: ${pipeline?.batteryOptimizer.batteryLevel ?? 100}% | Nhiệt độ: ${pipeline?.healthService?.thermalStatusText ?? "Bình thường"}',
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Mô phỏng mức Pin để kiểm tra điều tiết FPS (< 20% -> 10 FPS):',
+                    style: TextStyle(color: Colors.grey, fontSize: 11),
+                  ),
+                  Row(
+                    children: [
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+                        onPressed: () {
+                          pipeline?.healthService?.setMockHealth(batteryLevel: 15);
+                          pipeline?.batteryOptimizer.updateBatteryAndThermal(
+                            batteryLevel: 15,
+                            thermalStatus: pipeline.batteryOptimizer.thermalStatus,
+                          );
+                          setState(() {});
+                        },
+                        child: const Text('Pin 15% (Yếu)'),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF16A34A)),
+                        onPressed: () {
+                          pipeline?.healthService?.setMockHealth(batteryLevel: 85);
+                          pipeline?.batteryOptimizer.updateBatteryAndThermal(
+                            batteryLevel: 85,
+                            thermalStatus: pipeline.batteryOptimizer.thermalStatus,
+                          );
+                          setState(() {});
+                        },
+                        child: const Text('Pin 85% (Bình thường)'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Mô phỏng Quá nhiệt để kiểm tra Throttling (Severe >= 3 -> 8 FPS + Cảnh báo):',
+                    style: TextStyle(color: Colors.grey, fontSize: 11),
+                  ),
+                  Row(
+                    children: [
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+                        onPressed: () {
+                          pipeline?.healthService?.setMockHealth(thermalStatus: 3);
+                          pipeline?.batteryOptimizer.updateBatteryAndThermal(
+                            batteryLevel: pipeline.batteryOptimizer.batteryLevel,
+                            thermalStatus: 3,
+                          );
+                          setState(() {});
+                          if (pipeline?.batteryOptimizer.shouldAnnounceThermalWarning(DateTime.now().millisecondsSinceEpoch) == true) {
+                            widget.audio.speakVietnamese('Thiết bị quá nhiệt, giảm tốc độ xử lý', force: true, priority: 250);
+                          }
+                        },
+                        child: const Text('Quá nhiệt (Severe 3)'),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0284C7)),
+                        onPressed: () {
+                          pipeline?.healthService?.setMockHealth(thermalStatus: 0);
+                          pipeline?.batteryOptimizer.updateBatteryAndThermal(
+                            batteryLevel: pipeline.batteryOptimizer.batteryLevel,
+                            thermalStatus: 0,
+                          );
+                          setState(() {});
+                        },
+                        child: const Text('Mát mẻ (None 0)'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
             _buildSection(
               title: 'Thanh công cụ Người bảo hộ đi kèm',
               child: Row(

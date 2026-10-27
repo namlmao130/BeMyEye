@@ -1,33 +1,99 @@
+import '../config/thresholds.dart';
+
 /// battery_optimizer.dart
 /// Tối ưu hóa thời lượng Pin và Nhiệt độ thiết bị trong Flutter
+/// Điều tiết FPS và tải vi xử lý theo:
+/// 1. Vận tốc di chuyển của người đi bộ (bước đi vs đứng yên)
+/// 2. Mức pin thực tế (< 20% giảm FPS xuống 10, giãn chu kỳ phân tích bậc thềm)
+/// 3. Trạng thái nhiệt độ thực tế (Thermal Status API >= SEVERE: giảm FPS xuống 8, cảnh báo quá nhiệt)
 
 class BatteryThermalOptimizer {
   String userMovementState = 'walking';
   int consecutiveStaticFrames = 0;
-  int targetFPS = 20;
-  int minFrameIntervalMs = 50; // 1000 / 20 = 50ms
-  int _lastExecutionTime = 0;
 
+  int targetFPS = kFpsWalking;
+  int minFrameIntervalMs = 1000 ~/ kFpsWalking;
+
+  int _batteryLevel = 100;
+  int _thermalStatus = 0;
+
+  int _lastExecutionTime = 0;
+  int _lastGroundExecutionTime = 0;
+  int _lastThermalWarningTime = 0;
+
+  int get batteryLevel => _batteryLevel;
+  int get thermalStatus => _thermalStatus;
+  bool get isLowBattery => _batteryLevel >= 0 && _batteryLevel < kLowBatteryPercent;
+  bool get isOverheated => _thermalStatus >= kThermalStatusSevere;
+
+  /// Cập nhật vận tốc di chuyển từ GPS/Cảm biến
   void updateMovementState(double speedMps) {
-    if (speedMps < 0.25) {
+    if (speedMps < kStaticSpeedThreshold) {
       consecutiveStaticFrames++;
-      // Đứng yên liên tục quá 3 giây (khoảng 6 nhịp kiểm tra)
-      if (consecutiveStaticFrames > 6) {
+      if (consecutiveStaticFrames >= kStaticFramesThreshold) {
         userMovementState = 'standing';
-        targetFPS = 10;
-        minFrameIntervalMs = 100; // 10 FPS khi đứng yên
       }
     } else {
       consecutiveStaticFrames = 0;
       userMovementState = 'walking';
-      targetFPS = 22;
-      minFrameIntervalMs = 45; // 22 FPS khi bước đi
     }
+    _recalculateTargetFPS();
   }
 
+  /// Cập nhật tình trạng Pin và Nhiệt độ từ DeviceHealthService
+  void updateBatteryAndThermal({required int batteryLevel, required int thermalStatus}) {
+    _batteryLevel = batteryLevel;
+    _thermalStatus = thermalStatus;
+    _recalculateTargetFPS();
+  }
+
+  /// Tính toán lại FPS mục tiêu dựa trên ưu tiên:
+  /// Quá nhiệt (Thermal Throttling) > Pin yếu (< 20%) > Đứng yên > Đang bước đi
+  void _recalculateTargetFPS() {
+    if (isOverheated) {
+      targetFPS = kFpsThermalThrottling; // 8 FPS khi thiết bị quá nhiệt
+    } else if (isLowBattery) {
+      targetFPS = kFpsLowBattery; // 10 FPS khi pin < 20%
+    } else if (userMovementState == 'standing') {
+      targetFPS = kFpsStanding; // 10 FPS khi đứng yên
+    } else {
+      targetFPS = kFpsWalking; // 22 FPS khi bước đi bình thường
+    }
+
+    minFrameIntervalMs = 1000 ~/ targetFPS;
+  }
+
+  /// Kiểm tra xem có nên xử lý khung hình Camera hiện tại hay bỏ qua (Frame-Dropping)
   bool shouldProcessFrame(int currentTimeMs) {
     if (currentTimeMs - _lastExecutionTime >= minFrameIntervalMs) {
       _lastExecutionTime = currentTimeMs;
+      return true;
+    }
+    return false;
+  }
+
+  /// Điều tiết chu kỳ phân tích mặt đất & bậc thềm (GroundPlaneAnalyzer)
+  /// Khi Pin < 20% hoặc Quá nhiệt: giãn chu kỳ còn 1 lần/giây (1000ms) để giảm tải
+  /// Khi bình thường: xử lý theo mọi khung hình được phân tích
+  bool shouldProcessGroundPlane(int currentTimeMs) {
+    if (isLowBattery || isOverheated) {
+      if (currentTimeMs - _lastGroundExecutionTime >= kGroundIntervalLowBatteryMs) {
+        _lastGroundExecutionTime = currentTimeMs;
+        return true;
+      }
+      return false;
+    }
+
+    _lastGroundExecutionTime = currentTimeMs;
+    return true;
+  }
+
+  /// Kiểm tra xem có cần phát cảnh báo giọng nói "Thiết bị quá nhiệt, giảm tốc độ xử lý"
+  bool shouldAnnounceThermalWarning(int currentTimeMs) {
+    if (!isOverheated) return false;
+
+    if (currentTimeMs - _lastThermalWarningTime >= kThermalWarningCooldownMs) {
+      _lastThermalWarningTime = currentTimeMs;
       return true;
     }
     return false;

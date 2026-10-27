@@ -1,6 +1,6 @@
 /// csv_logger.dart
 /// Công cụ thu thập và trích xuất dữ liệu đo đạc thực địa (CSV Logging)
-/// Giúp người kiểm thử trên thiết bị thật ghi lại FPS, độ trễ và các cảnh báo để gửi về phân tích.
+/// Giúp người kiểm thử trên thiết bị thật ghi lại FPS, độ trễ, pin, nhiệt độ và các cảnh báo để gửi về phân tích.
 
 class CsvLogEntry {
   final String timestamp;
@@ -14,6 +14,8 @@ class CsvLogEntry {
   final String threatDirection;
   final String threatDistance;
   final String delegate;
+  final int batteryLevel;
+  final int thermalStatus;
 
   CsvLogEntry({
     required this.timestamp,
@@ -27,6 +29,8 @@ class CsvLogEntry {
     required this.threatDirection,
     required this.threatDistance,
     required this.delegate,
+    this.batteryLevel = 100,
+    this.thermalStatus = 0,
   });
 
   String toCsvRow() {
@@ -40,13 +44,15 @@ class CsvLogEntry {
         '"$primaryThreat",'
         '"$threatDirection",'
         '"$threatDistance",'
-        '"$delegate"';
+        '"$delegate",'
+        '$batteryLevel,'
+        '$thermalStatus';
   }
 }
 
 class CsvLogger {
   static const String csvHeader =
-      'timestamp,fps,latency_preprocess_ms,latency_inference_ms,latency_analysis_ms,latency_total_ms,object_count,primary_threat,threat_direction,threat_distance,delegate';
+      'timestamp,fps,latency_preprocess_ms,latency_inference_ms,latency_analysis_ms,latency_total_ms,object_count,primary_threat,threat_direction,threat_distance,delegate,battery_level,thermal_status';
 
   final List<CsvLogEntry> _entries = [];
   static const int maxEntries = 5000;
@@ -65,6 +71,8 @@ class CsvLogger {
     required String threatDirection,
     required String threatDistance,
     required String delegate,
+    int batteryLevel = 100,
+    int thermalStatus = 0,
   }) {
     if (_entries.length >= maxEntries) {
       _entries.removeAt(0);
@@ -81,6 +89,8 @@ class CsvLogger {
       threatDirection: threatDirection,
       threatDistance: threatDistance,
       delegate: delegate,
+      batteryLevel: batteryLevel,
+      thermalStatus: thermalStatus,
     ));
   }
 
