@@ -154,8 +154,9 @@ class AudioHapticsService {
     speechInvocationCount++;
     spokenHistory.add(text);
 
-    if (_customSpeaker != null) {
-      await _customSpeaker(text);
+    final speaker = _customSpeaker;
+    if (speaker != null) {
+      await speaker(text);
       return;
     }
 

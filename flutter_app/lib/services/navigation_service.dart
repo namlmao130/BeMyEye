@@ -115,8 +115,9 @@ class NavigationService {
 
     try {
       final String responseBody;
-      if (_httpGetClient != null) {
-        responseBody = await _httpGetClient!(uri);
+      final httpClientFn = _httpGetClient;
+      if (httpClientFn != null) {
+        responseBody = await httpClientFn(uri);
       } else {
         final client = HttpClient();
         client.connectionTimeout = Duration(milliseconds: kOsrmNetworkTimeoutMs);
