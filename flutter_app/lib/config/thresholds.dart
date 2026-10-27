@@ -171,3 +171,24 @@ int kFpsThermalThrottling = 8;
 /// Thời gian giãn cách tối thiểu giữa 2 lần phát cảnh báo giọng nói về quá nhiệt
 /// Đơn vị: Mili-giây (ms). 15 giây/lần để tránh nói liên tục.
 int kThermalWarningCooldownMs = 15000;
+
+// ============================================================================
+// 7. NGƯỠNG DẪN ĐƯỜNG GPS & ĐI BỘ OSRM (NAVIGATION)
+// ============================================================================
+
+/// Bán kính đạt mốc dẫn đường (mét). Dưới 6 mét coi như đã chạm điểm mốc.
+double kGpsArrivalThresholdMeters = 6.0;
+
+/// Thời gian giãn cách giữa các lần nhắc nhở chỉ dẫn GPS nếu không chuyển mốc
+/// Đơn vị: Mili-giây (ms).
+int kGpsInstructionCooldownMs = 6000;
+
+/// Mức độ ưu tiên giọng nói dẫn đường GPS (Thấp hơn nhiều so với camera threat: 200+)
+int kGpsSpeechPriority = 50;
+
+/// Địa chỉ API định tuyến đi bộ OpenStreetMap / OSRM Foot Profile
+String kOsrmFootApiBase = 'https://router.project-osrm.org/route/v1/foot';
+
+/// Thời gian chờ mạng tối đa khi truy vấn OSRM
+/// Đơn vị: Mili-giây (ms). Quá 7 giây sẽ chuyển sang lộ trình dự phòng/ngoại tuyến.
+int kOsrmNetworkTimeoutMs = 7000;

@@ -607,6 +607,63 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Tải tuyến đi bộ OpenStreetMap (OSRM Foot Profile - NV11):',
+                    style: TextStyle(color: Colors.grey, fontSize: 11),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () async {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Đang tải tuyến đi bộ OSRM: Hồ Gươm -> Nhà Hát Lớn...')),
+                            );
+                            final ok = await widget.navService.startNavigationToDestination(
+                              destLat: NavigationService.hanoiDestLat,
+                              destLng: NavigationService.hanoiDestLng,
+                              destName: 'Nhà Hát Lớn Hà Nội',
+                              fallbackStartLat: NavigationService.hanoiStartLat,
+                              fallbackStartLng: NavigationService.hanoiStartLng,
+                            );
+                            setState(() {});
+                            if (ok && mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Đã nạp ${widget.navService.activeRoute.length} mốc OSRM Hà Nội!')),
+                              );
+                            }
+                          },
+                          child: const Text('OSRM Hà Nội', style: TextStyle(fontSize: 12)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () async {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Đang tải tuyến đi bộ OSRM: Nguyễn Huệ -> Bến Thành...')),
+                            );
+                            final ok = await widget.navService.startNavigationToDestination(
+                              destLat: NavigationService.hcmcDestLat,
+                              destLng: NavigationService.hcmcDestLng,
+                              destName: 'Chợ Bến Thành',
+                              fallbackStartLat: NavigationService.hcmcStartLat,
+                              fallbackStartLng: NavigationService.hcmcStartLng,
+                            );
+                            setState(() {});
+                            if (ok && mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Đã nạp ${widget.navService.activeRoute.length} mốc OSRM TP.HCM!')),
+                              );
+                            }
+                          },
+                          child: const Text('OSRM TP.HCM', style: TextStyle(fontSize: 12)),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
