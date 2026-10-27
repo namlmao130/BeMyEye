@@ -309,13 +309,17 @@ class SpatialAnalyzer {
       }
 
       // Bù trừ góc nghiêng điện thoại (tiltAngleRad)
+      // QUY ƯỚC QUAN TRỌNG (NV12.4): Khi camera chúc xuống đất (tiltAngleRad > 0),
+      // vật thể trên mặt đất dịch lên trên khung ảnh, do đó ngưỡng bottomY PHẢI GIẢM TƯƠNG ỨNG.
+      // Ngược lại khi camera ngửa lên trời (tiltAngleRad < 0), ngưỡng bottomY tăng.
+      // (Cần chạy kiểm chứng trên máy thật đeo ngực).
       final double tiltOffset = (tiltAngleRad * kTiltCompensationFactor).clamp(-0.15, 0.15);
 
-      final double effectiveCriticalBottomY = (kCriticalBottomY + tiltOffset).clamp(0.60, 0.95);
-      final double effectiveNearBottomY = (kNearBottomY + tiltOffset).clamp(0.45, 0.85);
+      final double effectiveCriticalBottomY = (kCriticalBottomY - tiltOffset).clamp(0.60, 0.95);
+      final double effectiveNearBottomY = (kNearBottomY - tiltOffset).clamp(0.45, 0.85);
 
-      final double effectiveLargeCriticalBottomY = (kLargeVehicleCriticalBottomY + tiltOffset).clamp(0.65, 0.95);
-      final double effectiveLargeNearBottomY = (kLargeVehicleNearBottomY + tiltOffset).clamp(0.50, 0.85);
+      final double effectiveLargeCriticalBottomY = (kLargeVehicleCriticalBottomY - tiltOffset).clamp(0.65, 0.95);
+      final double effectiveLargeNearBottomY = (kLargeVehicleNearBottomY - tiltOffset).clamp(0.50, 0.85);
 
       // 5. ƯỚC LƯỢNG CỰ LY THEO LỚP ĐỐI TƯỢNG VÀ BÙ TRỪ GÓC NGHIÊNG
       final bool isLargeVehicle = kLargeVehicleClasses.contains(label.toLowerCase());

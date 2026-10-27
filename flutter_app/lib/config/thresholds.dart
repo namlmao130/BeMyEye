@@ -49,6 +49,11 @@ double kDefaultMountHeightMeters = 1.35;
 double kCalibratedNeutralTiltRad = 0.0;
 
 /// Hệ số bù trừ góc nghiêng điện thoại cho ngưỡng bottomY.
+/// QUY ƯỚC QUAN TRỌNG: Khi camera chúc xuống đất (tiltAngleRad > 0), hình ảnh vật thể trên mặt đất
+/// dịch chuyển lên phía trên khung hình (giá trị Y giảm). Do đó, ngưỡng bottomY để kích hoạt
+/// cự ly gần và nguy cấp PHẢI GIẢM (effectiveBottomY = kBottomY - tiltOffset).
+/// LƯU Ý AN TOÀN: Hệ số và dấu quy ước này cần được người dùng chạy thử trên máy thật đeo ngực thực tế
+/// để kiểm chứng và hiệu chuẩn lại theo góc ngực cá nhân.
 double kTiltCompensationFactor = 0.35;
 
 /// Danh sách các lớp phương tiện/vật thể có kích thước lớn (chiếm diện tích lớn dù ở xa).

@@ -68,16 +68,24 @@ void main() {
         'score': 0.85,
       };
 
-      // 1. Khi điện thoại thẳng đứng (tilt = 0.0 rad) -> Chân vật thể ở 0.83 >= 0.82 -> Critical
-      final normalResults = analyzer.analyze([obstacle], 300.0, 300.0, tiltAngleRad: 0.0, customNow: 0);
-      expect(normalResults[0].distanceLevel, equals(DistanceLevel.critical));
+      final obstacle = {
+        'bbox': [100.0, 100.0, 100.0, 110.0], // bottomY = (100+110)/300 = 0.70
+        'label': 'chair',
+        'vietnameseLabel': 'Ghế quán cóc',
+        'category': 'obstacle',
+        'score': 0.85,
+      };
 
-      // 2. Khi người dùng cúi người / điện thoại chúi xuống 20 độ (~0.35 rad):
-      // Ngưỡng critical được bù trừ nâng lên: 0.82 + (0.35 * 0.35) = 0.94
-      // Lúc này bottomY = 0.83 < 0.94 -> Không bị báo nhầm là critical!
+      // 1. Khi điện thoại thẳng đứng (tilt = 0.0 rad) -> Chân vật thể ở bottomY = 0.70 < 0.82 -> Mức Near (1.5m - 3.0m)
+      final normalResults = analyzer.analyze([obstacle], 300.0, 300.0, tiltAngleRad: 0.0, customNow: 0);
+      expect(normalResults[0].distanceLevel, equals(DistanceLevel.near));
+
+      // 2. Khi điện thoại chúc xuống 20 độ (~0.35 rad):
+      // QUY ƯỚC (NV12.4): Camera chúc xuống đất thì ngưỡng bottomY GIẢM (0.82 - 0.1225 = ~0.6975)
+      // Lúc này bottomY = 0.70 >= 0.6975 -> Được xếp vào mức Critical (< 1.5m) vì camera hướng xuống nhìn sát chân hơn!
       final tiltedResults = analyzer.analyze([obstacle], 300.0, 300.0, tiltAngleRad: 20.0 * pi / 180.0, customNow: 0);
-      expect(tiltedResults[0].distanceLevel, equals(DistanceLevel.near),
-          reason: 'Góc chúi xuống phải nâng ngưỡng để tránh báo nhầm mặt đất');
+      expect(tiltedResults[0].distanceLevel, equals(DistanceLevel.critical),
+          reason: 'Camera chúc xuống thì ngưỡng bottomY giảm, phát hiện vật cản gần sát ngực');
     });
   });
 }
