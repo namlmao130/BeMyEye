@@ -1,23 +1,31 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Quyền Camera -->
+    <!-- Quyền thiết yếu cho thị giác máy tính và dẫn đường on-device (NV10) -->
+    <!-- 1. Luồng Camera thời gian thực -->
     <uses-permission android:name="android.permission.CAMERA" />
-    <uses-feature android:name="android.hardware.camera" />
-    <uses-feature android:name="android.hardware.camera.autofocus" />
 
-    <!-- Giữ màn hình sáng khi dẫn đường -->
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-
-    <!-- Quyền Rung xúc giác -->
+    <!-- 2. Rung xúc giác phản hồi -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- Quyền Định vị GPS chính xác cao -->
+    <!-- 3. Định vị GPS đi bộ -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
-    <!-- Cảm biến La bàn số & Gia tốc kế -->
-    <uses-feature android:name="android.hardware.sensor.compass" android:required="true" />
-    <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="true" />
+    <!-- 4. Kết nối Internet truy vấn tuyến đường đi bộ OSRM (NV11) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- 5. Giữ màn hình sáng và dịch vụ chạy nền khi gắn ngực -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
+    <!-- Yêu cầu phần cứng linh hoạt: android:required="false" để máy tầm trung / giá rẻ vẫn cài được -->
+    <uses-feature android:name="android.hardware.camera" android:required="true" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.compass" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" />
 
     <application
         android:label="Be My Eyes VN"

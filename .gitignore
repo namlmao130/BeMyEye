@@ -1,5 +1,36 @@
+# Android & Gradle
 .gradle/
 **/build/
+**/android/app/build/
+**/android/.gradle/
+local.properties
+*.apk
+*.aab
+
+# Dart & Flutter
 .dart_tool/
+.packages
+pubspec.lock
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDEs & OS
 .idea/
 *.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Sensitive Keys, Certificates & Credentials (NV10)
+certs/
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+*.env
+*.env.*
+
+# Temporary logs & benchmarking test artifacts
+extracted_log/
+*.log
