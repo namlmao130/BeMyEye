@@ -3,8 +3,9 @@ import 'package:be_my_eye_vn/config/thresholds.dart';
 
 void main() {
   group('NV1 - Trạng thái dự án và Ngưỡng cấu hình ban đầu', () {
-    test('kPipelineEnabled đã được kích hoạt sau khi nối pipeline camera ở NV3', () {
-      expect(kPipelineEnabled, isTrue);
+    test('Ngưỡng Watchdog và kiểm soát lỗi suy luận được định nghĩa chính xác', () {
+      expect(kWatchdogFrameTimeoutMs, equals(1500));
+      expect(kMaxConsecutiveInferenceErrors, equals(5));
     });
 
     test('Các ngưỡng không gian cơ bản phải hợp lệ', () {

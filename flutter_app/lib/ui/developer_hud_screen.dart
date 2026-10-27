@@ -68,11 +68,11 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
 
     final fpsText = (pipeline != null && pipeline.currentFps > 0)
         ? pipeline.currentFps.toStringAsFixed(1)
-        : (kPipelineEnabled ? '--' : 'Chưa đo');
+        : (pipeline?.status == PipelineStatus.running ? '--' : 'Chưa chạy');
 
     final latencyText = (pipeline != null && pipeline.latencyTotalMs > 0)
         ? '${pipeline.latencyTotalMs} ms'
-        : (kPipelineEnabled ? '--' : 'Chưa đo');
+        : (pipeline?.status == PipelineStatus.running ? '--' : 'Chưa chạy');
 
     return Scaffold(
       backgroundColor: const Color(0xFF121212),

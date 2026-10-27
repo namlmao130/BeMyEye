@@ -4,12 +4,15 @@
 /// đều phải được định nghĩa tại đây với đơn vị và lý do rõ ràng.
 
 // ============================================================================
-// 1. CỜ TRẠNG THÁI HỆ THỐNG
+// 1. TRẠNG THÁI HỆ THỐNG & WATCHDOG (PIPELINE WATCHDOG)
 // ============================================================================
 
-/// Cờ kích hoạt luồng camera thực tế.
-/// Đặt [true] khi hoàn thành Nhiệm vụ 3 (nối Camera Stream).
-bool kPipelineEnabled = true;
+/// Thời gian tối đa không nhận được khung hình camera trước khi Watchdog báo lỗi (mili-giây).
+/// Nếu quá 1.5 giây (1500ms) không có khung mới, pipeline chuyển sang trạng thái failed.
+const int kWatchdogFrameTimeoutMs = 1500;
+
+/// Số lần suy luận lỗi liên tiếp tối đa trước khi Watchdog ngắt pipeline
+const int kMaxConsecutiveInferenceErrors = 5;
 
 // ============================================================================
 // 2. NGƯỠNG PHÂN TÍCH KHÔNG GIAN (SPATIAL ANALYZER)

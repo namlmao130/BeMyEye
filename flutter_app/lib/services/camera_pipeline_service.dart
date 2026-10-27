@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../config/thresholds.dart';
 import '../models/detection_result.dart';
 import '../models/ground_hazard.dart';
 import 'detector_service.dart';
@@ -16,6 +18,9 @@ import 'device_health_service.dart';
 /// camera_pipeline_service.dart
 /// Trực tiếp điều khiển luồng Camera thời gian thực, điều tiết khung hình,
 /// tiền xử lý ảnh trong Isolate, và điều phối chuỗi suy luận -> phân tích -> cảnh báo.
+/// Tự động suy ra PipelineStatus thực tế và bảo vệ người dùng qua cơ chế Watchdog.
+
+enum PipelineStatus { demo, starting, running, failed }
 
 class CameraPipelineService {
   final DetectorService detectorService;
@@ -37,6 +42,19 @@ class CameraPipelineService {
   bool get isStreaming => _isStreaming;
 
   bool _isProcessingFrame = false;
+
+  // Trạng thái thực tế của Pipeline (NV12.2)
+  PipelineStatus _status = PipelineStatus.demo;
+  PipelineStatus get status => _status;
+
+  // Watchdog kiểm soát mất khung hình và lỗi suy luận
+  int _lastFrameTimestamp = 0;
+  int get lastFrameTimestamp => _lastFrameTimestamp;
+
+  int _consecutiveInferenceErrors = 0;
+  int get consecutiveInferenceErrors => _consecutiveInferenceErrors;
+
+  Timer? _watchdogTimer;
 
   // Chỉ số hiệu năng thời gian thực (được tính toán thực sự từ luồng ảnh)
   double currentFps = 0.0;
@@ -66,6 +84,44 @@ class CameraPipelineService {
     this.tiltService,
     this.healthService,
   });
+
+  /// Cập nhật trạng thái Pipeline và phát cảnh báo bằng giọng nói tương ứng
+  void updateStatus(PipelineStatus newStatus, {String? reason}) {
+    if (_status == newStatus) return;
+    final oldStatus = _status;
+    _status = newStatus;
+    debugPrint('PipelineStatus: $oldStatus -> $newStatus (${reason ?? "no reason"})');
+
+    if (newStatus == PipelineStatus.running) {
+      // Chỉ nói "Đã bật trợ lý dẫn đường" khi thực sự running
+      alertEngine.audio.speakVietnamese(
+        'Đã bật trợ lý dẫn đường',
+        force: true,
+        priority: 100,
+      );
+    } else if (newStatus == PipelineStatus.failed) {
+      // Mọi lỗi nghiêm trọng phải kêu to và khóa dẫn đường
+      alertEngine.audio.speakVietnamese(
+        'Mất tín hiệu camera, đừng dùng để dẫn đường',
+        force: true,
+        priority: 300,
+      );
+    }
+    onFrameProcessed?.call();
+  }
+
+  /// Kiểm tra Watchdog: Quá 1.5s không có khung hình mới khi đang streaming thì báo lỗi
+  void checkWatchdog([int? customNow]) {
+    if (!_isStreaming || _status != PipelineStatus.running) return;
+
+    final now = customNow ?? DateTime.now().millisecondsSinceEpoch;
+    if (_lastFrameTimestamp > 0 && (now - _lastFrameTimestamp) > kWatchdogFrameTimeoutMs) {
+      updateStatus(
+        PipelineStatus.failed,
+        reason: 'Watchdog: Quá ${kWatchdogFrameTimeoutMs}ms không có khung hình mới',
+      );
+    }
+  }
 
   /// Khởi tạo camera với cấu hình tối ưu độ trễ và năng lượng
   Future<void> initializeCamera({CameraDescription? customCamera}) async {
@@ -102,12 +158,39 @@ class CameraPipelineService {
 
   /// Bắt đầu stream camera và kích hoạt pipeline
   Future<void> startStream() async {
+    // 1. Kiểm tra quyền Camera, xử lý từ chối bằng giọng nói (NV12.2)
+    try {
+      final permStatus = await Permission.camera.status;
+      if (!permStatus.isGranted) {
+        final requestResult = await Permission.camera.request();
+        if (!requestResult.isGranted) {
+          updateStatus(PipelineStatus.failed, reason: 'Quyền truy cập camera bị từ chối');
+          alertEngine.audio.speakVietnamese(
+            'Chưa cấp quyền camera, không thể dẫn đường',
+            force: true,
+            priority: 300,
+          );
+          return;
+        }
+      }
+    } catch (_) {
+      // Giả lập hoặc môi trường test không có permission handler
+    }
+
+    updateStatus(PipelineStatus.starting);
+
     if (!_isInitialized || _cameraController == null) {
       await initializeCamera();
     }
 
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
       debugPrint('Không thể bật camera stream: Camera chưa sẵn sàng');
+      updateStatus(PipelineStatus.failed, reason: 'Camera chưa sẵn sàng hoặc không tồn tại');
+      alertEngine.audio.speakVietnamese(
+        'Không thể khởi động camera, đừng dùng để dẫn đường',
+        force: true,
+        priority: 300,
+      );
       return;
     }
 
@@ -115,20 +198,43 @@ class CameraPipelineService {
 
     _frameCount = 0;
     _lastFpsCalcTime = DateTime.now().millisecondsSinceEpoch;
+    _lastFrameTimestamp = DateTime.now().millisecondsSinceEpoch;
+    _consecutiveInferenceErrors = 0;
     _isProcessingFrame = false;
     _isStreaming = true;
+
+    // Kích hoạt Watchdog timer kiểm tra định kỳ mỗi 500ms
+    _watchdogTimer?.cancel();
+    _watchdogTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      checkWatchdog();
+    });
 
     try {
       await _cameraController!.startImageStream(_handleCameraImage);
     } catch (e) {
       debugPrint('Lỗi startImageStream: $e');
       _isStreaming = false;
+      _watchdogTimer?.cancel();
+      updateStatus(PipelineStatus.failed, reason: 'Lỗi startImageStream: $e');
+      alertEngine.audio.speakVietnamese(
+        'Không thể khởi động camera, đừng dùng để dẫn đường',
+        force: true,
+        priority: 300,
+      );
     }
   }
 
   /// Dừng stream camera
   Future<void> stopStream() async {
-    if (!_isStreaming || _cameraController == null) return;
+    _watchdogTimer?.cancel();
+    _watchdogTimer = null;
+
+    if (!_isStreaming || _cameraController == null) {
+      if (_status != PipelineStatus.failed) {
+        _status = PipelineStatus.demo;
+      }
+      return;
+    }
 
     try {
       _isStreaming = false;
@@ -137,17 +243,27 @@ class CameraPipelineService {
       debugPrint('Lỗi stopImageStream: $e');
     } finally {
       _isProcessingFrame = false;
+      if (_status != PipelineStatus.failed) {
+        _status = PipelineStatus.demo;
+      }
+      onFrameProcessed?.call();
     }
   }
 
   /// Xử lý từng khung hình từ CameraStream (Non-blocking, Frame-dropping)
   void _handleCameraImage(CameraImage image) {
-    if (!_isStreaming || !detectorService.isReady) return;
+    if (!_isStreaming) return;
+
+    final int now = DateTime.now().millisecondsSinceEpoch;
+    _lastFrameTimestamp = now;
+
+    // Running chỉ khi detector.isReady VÀ có khung mới trong 1.5 giây (NV12.2)
+    if (detectorService.isReady && _status != PipelineStatus.running) {
+      updateStatus(PipelineStatus.running);
+    }
 
     // 1. Frame-Dropping: Nếu khung trước đang xử lý thì bỏ qua ngay lập tức, không xếp hàng!
     if (_isProcessingFrame) return;
-
-    final int now = DateTime.now().millisecondsSinceEpoch;
 
     // 2. Throttling năng lượng: Kiểm tra nhịp thời gian từ BatteryThermalOptimizer
     if (!batteryOptimizer.shouldProcessFrame(now)) return;
@@ -196,13 +312,27 @@ class CameraPipelineService {
       final int tPreprocessDone = DateTime.now().millisecondsSinceEpoch;
       latencyPreprocessMs = tPreprocessDone - frameStartTime;
 
-      // BƯỚC 2: Suy luận TFLite SSD MobileNet on-device
+      // BƯỚC 2: Suy luận TFLite SSD MobileNet on-device (Bắt lỗi liên tiếp để Watchdog xử lý)
       final int tInferStart = DateTime.now().millisecondsSinceEpoch;
-      final rawDetections = detectorService.detectFromImage(
-        preprocessed.rgb300,
-        300,
-        300,
-      );
+      List<Map<String, dynamic>> rawDetections;
+      try {
+        rawDetections = detectorService.detectFromImage(
+          preprocessed.rgb300,
+          300,
+          300,
+        );
+        _consecutiveInferenceErrors = 0;
+      } catch (err) {
+        _consecutiveInferenceErrors++;
+        debugPrint('Lỗi suy luận detectorService: $err (Lần thứ $_consecutiveInferenceErrors)');
+        rawDetections = [];
+        if (_consecutiveInferenceErrors >= kMaxConsecutiveInferenceErrors) {
+          updateStatus(
+            PipelineStatus.failed,
+            reason: 'Watchdog: Quá $kMaxConsecutiveInferenceErrors lần suy luận lỗi liên tiếp',
+          );
+        }
+      }
       final int tInferDone = DateTime.now().millisecondsSinceEpoch;
       latencyInferenceMs = tInferDone - tInferStart;
 
@@ -282,13 +412,20 @@ class CameraPipelineService {
   }
 
   /// Hỗ trợ chạy giả lập khung hình cho Unit Test & Benchmark mà không cần phần cứng
-  Future<void> processSyntheticFrame(CameraFrameData frameData) async {
-    final now = DateTime.now().millisecondsSinceEpoch;
+  Future<void> processSyntheticFrame(CameraFrameData frameData, {int? customNow}) async {
+    final now = customNow ?? DateTime.now().millisecondsSinceEpoch;
+    _lastFrameTimestamp = now;
+
+    if (detectorService.isReady && _status != PipelineStatus.running) {
+      updateStatus(PipelineStatus.running);
+    }
+
     _isProcessingFrame = true;
     await _executePipeline(frameData, now);
   }
 
   void dispose() {
+    _watchdogTimer?.cancel();
     stopStream();
     _cameraController?.dispose();
     _cameraController = null;

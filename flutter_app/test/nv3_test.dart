@@ -108,8 +108,19 @@ void main() {
   });
 
   group('NV3 - Chuỗi Pipeline Camera & Tích hợp cảnh báo', () {
-    test('kPipelineEnabled được bật sang true', () {
-      expect(kPipelineEnabled, isTrue);
+    test('PipelineStatus ban đầu ở trạng thái demo', () {
+      final audio = AudioHapticsService();
+      final pipeline = CameraPipelineService(
+        detectorService: DetectorService(),
+        spatialAnalyzer: SpatialAnalyzer(),
+        groundAnalyzer: GroundPlaneAnalyzer(),
+        alertEngine: AlertDecisionEngine(audio: audio),
+        batteryOptimizer: BatteryThermalOptimizer(),
+        csvLogger: CsvLogger(),
+      );
+      expect(pipeline.status, equals(PipelineStatus.demo));
+      pipeline.dispose();
+      audio.dispose();
     });
 
     test('CameraPipelineService xử lý khung hình giả lập tuần tự qua toàn bộ pipeline', () async {

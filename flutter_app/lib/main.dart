@@ -110,17 +110,8 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
         await WakelockPlus.enable();
       } catch (_) {}
 
-      // Kích hoạt luồng camera stream
+      // Kích hoạt luồng camera stream (chỉ nói "Đã bật trợ lý" khi thực sự running từ Pipeline)
       await _cameraPipeline.startStream();
-
-      if (!kPipelineEnabled) {
-        _audioService.speakVietnamese(
-          'Bản thử nghiệm, chưa nhận diện camera. Không dùng để dẫn đường thực tế.',
-          force: true,
-        );
-      } else {
-        _audioService.speakVietnamese('Đã bật trợ lý dẫn đường', force: true);
-      }
     } else {
       // Dừng stream camera và giải phóng wakelock
       await _cameraPipeline.stopStream();
