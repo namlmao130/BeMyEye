@@ -39,6 +39,24 @@ double kNearAreaRatio = 0.08;
 /// Đơn vị: Tỷ lệ diện tích (0.0 -> 1.0).
 double kCriticalAreaRatio = 0.22;
 
+/// Chiều cao đeo điện thoại mặc định ngang ngực (mét).
+double kDefaultMountHeightMeters = 1.35;
+
+/// Góc nghiêng ngực hiệu chuẩn ban đầu (radian).
+double kCalibratedNeutralTiltRad = 0.0;
+
+/// Hệ số bù trừ góc nghiêng điện thoại cho ngưỡng bottomY.
+double kTiltCompensationFactor = 0.35;
+
+/// Danh sách các lớp phương tiện/vật thể có kích thước lớn (chiếm diện tích lớn dù ở xa).
+const Set<String> kLargeVehicleClasses = {'bus', 'truck', 'train'};
+
+/// Ngưỡng chân vật thể lớn cho cự ly Gần (1.5m - 3.0m).
+double kLargeVehicleNearBottomY = 0.68;
+
+/// Ngưỡng chân vật thể lớn cho cự ly Nguy cấp (< 1.5m).
+double kLargeVehicleCriticalBottomY = 0.84;
+
 /// Ngưỡng tốc độ tăng diện tích tương đối (dArea / area mỗi giây) để coi là đang lao tới (Approaching).
 /// Đơn vị: Tỷ lệ / giây (1/s).
 double kApproachThreshold = 0.15;

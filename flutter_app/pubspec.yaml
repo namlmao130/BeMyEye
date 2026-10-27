@@ -37,6 +37,9 @@ dependencies:
   # Giữ màn hình luôn sáng khi dẫn đường (OLED Black tiết kiệm pin)
   wakelock_plus: ^1.2.8
 
+  # Cảm biến độ nghiêng, gia tốc kế (Đo góc nghiêng ngực)
+  sensors_plus: ^6.1.1
+
   # Quản lý quyền truy cập hệ thống (Camera, Vị trí, Micro)
   permission_handler: ^11.3.1
 

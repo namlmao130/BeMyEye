@@ -319,6 +319,88 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
             ),
             const SizedBox(height: 14),
 
+            // Hiệu chuẩn Góc nghiêng & Chiều cao đeo (NV6)
+            _buildSection(
+              title: 'Hiệu chuẩn Góc nghiêng & Khoảng cách (NV6)',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Góc nghiêng ngực: ${(pipeline?.tiltService?.effectiveTiltDeg ?? 0.0).toStringAsFixed(1)}°',
+                        style: const TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0284C7),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        ),
+                        icon: const Icon(Icons.screen_rotation, size: 16),
+                        label: const Text('Hiệu chuẩn góc 0°'),
+                        onPressed: () {
+                          pipeline?.tiltService?.calibrateNeutral();
+                          setState(() {});
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Đã hiệu chuẩn góc đeo ngực hiện tại làm mốc 0°!')),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Text(
+                        'Chiều cao đeo: ${kDefaultMountHeightMeters.toStringAsFixed(2)}m',
+                        style: const TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                      Expanded(
+                        child: Slider(
+                          value: kDefaultMountHeightMeters,
+                          min: 1.10,
+                          max: 1.85,
+                          divisions: 15,
+                          label: '${kDefaultMountHeightMeters.toStringAsFixed(2)}m',
+                          activeColor: const Color(0xFF38BDF8),
+                          onChanged: (val) {
+                            setState(() {
+                              kDefaultMountHeightMeters = val;
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Text(
+                        'Ngưỡng Nguy cấp: ${kCriticalBottomY.toStringAsFixed(2)}',
+                        style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13),
+                      ),
+                      Expanded(
+                        child: Slider(
+                          value: kCriticalBottomY,
+                          min: 0.70,
+                          max: 0.95,
+                          divisions: 25,
+                          label: kCriticalBottomY.toStringAsFixed(2),
+                          activeColor: const Color(0xFFEF4444),
+                          onChanged: (val) {
+                            setState(() {
+                              kCriticalBottomY = val;
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+
             // Thanh công cụ Người bảo hộ đi kèm (Field Testing Toolbar)
             _buildSection(
               title: 'Thanh công cụ Người bảo hộ đi kèm',

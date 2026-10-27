@@ -10,6 +10,7 @@ import 'alert_decision_engine.dart';
 import 'battery_optimizer.dart';
 import 'csv_logger.dart';
 import 'image_preprocessor.dart';
+import 'tilt_calibration_service.dart';
 
 /// camera_pipeline_service.dart
 /// Trực tiếp điều khiển luồng Camera thời gian thực, điều tiết khung hình,
@@ -22,6 +23,7 @@ class CameraPipelineService {
   final AlertDecisionEngine alertEngine;
   final BatteryThermalOptimizer batteryOptimizer;
   final CsvLogger csvLogger;
+  final TiltCalibrationService? tiltService;
 
   CameraController? _cameraController;
   CameraController? get controller => _cameraController;
@@ -58,6 +60,7 @@ class CameraPipelineService {
     required this.alertEngine,
     required this.batteryOptimizer,
     required this.csvLogger,
+    this.tiltService,
   });
 
   /// Khởi tạo camera với cấu hình tối ưu độ trễ và năng lượng
@@ -182,14 +185,16 @@ class CameraPipelineService {
       final int tInferDone = DateTime.now().millisecondsSinceEpoch;
       latencyInferenceMs = tInferDone - tInferStart;
 
-      // BƯỚC 3: Phân tích không gian 2D (Spatial Corridor Analysis)
+      // BƯỚC 3: Phân tích không gian 2D (Spatial Corridor Analysis với bù trừ góc nghiêng)
       final int tAnalysisStart = DateTime.now().millisecondsSinceEpoch;
       final double walkingSpeed = (batteryOptimizer.userMovementState == 'walking') ? 1.0 : 0.0;
+      final double tilt = tiltService?.effectiveTiltRad ?? 0.0;
       final spatialHazards = spatialAnalyzer.analyze(
         rawDetections,
         300,
         300,
         walkingSpeedMps: walkingSpeed,
+        tiltAngleRad: tilt,
       );
 
       // BƯỚC 4: Phân tích mặt đất & bậc thềm (Ground Plane Luminance Analysis)

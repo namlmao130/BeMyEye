@@ -87,6 +87,7 @@ class SpatialAnalyzer {
     double frameWidth,
     double frameHeight, {
     double walkingSpeedMps = 0.0,
+    double tiltAngleRad = 0.0,
     int? customNow,
   }) {
     final now = customNow ?? DateTime.now().millisecondsSinceEpoch;
@@ -198,19 +199,60 @@ class SpatialAnalyzer {
         panValue = (cx - 0.5) * 0.4;
       }
 
-      // 5. ƯỚC LƯỢNG CỰ LY THEO NGƯỠNG
+      // Bù trừ góc nghiêng điện thoại (tiltAngleRad)
+      final double tiltOffset = (tiltAngleRad * kTiltCompensationFactor).clamp(-0.15, 0.15);
+
+      final double effectiveCriticalBottomY = (kCriticalBottomY + tiltOffset).clamp(0.60, 0.95);
+      final double effectiveNearBottomY = (kNearBottomY + tiltOffset).clamp(0.45, 0.85);
+
+      final double effectiveLargeCriticalBottomY = (kLargeVehicleCriticalBottomY + tiltOffset).clamp(0.65, 0.95);
+      final double effectiveLargeNearBottomY = (kLargeVehicleNearBottomY + tiltOffset).clamp(0.50, 0.85);
+
+      // 5. ƯỚC LƯỢNG CỰ LY THEO LỚP ĐỐI TƯỢNG VÀ BÙ TRỪ GÓC NGHIÊNG
+      final bool isLargeVehicle = kLargeVehicleClasses.contains(label.toLowerCase());
       DistanceLevel distLevel = DistanceLevel.far;
       String distText = '> 3.0m';
 
-      if (bottomY >= kCriticalBottomY || areaRatio >= kCriticalAreaRatio) {
-        distLevel = DistanceLevel.critical;
-        distText = '< 1.5m';
-      } else if (bottomY >= kNearBottomY || areaRatio >= kNearAreaRatio) {
-        distLevel = DistanceLevel.near;
-        distText = '1.5m - 3.0m';
+      if (isLargeVehicle) {
+        // ĐỐI VỚI XE BUÝT / XE TẢI:
+        // Xe buýt ở xa 15m vẫn chiếm diện tích lớn trong khung hình.
+        // Để đạt mức critical (< 1.5m), BẮT BUỘC bánh xe (bottomY) phải chạm gần chân người đi bộ.
+        if (bottomY >= effectiveLargeCriticalBottomY && areaRatio >= 0.25) {
+          distLevel = DistanceLevel.critical;
+          distText = '< 1.5m';
+        } else if (bottomY >= effectiveLargeNearBottomY) {
+          distLevel = DistanceLevel.near;
+          distText = '1.5m - 3.0m';
+        } else {
+          distLevel = DistanceLevel.far;
+          distText = '> 3.0m';
+        }
+      } else if (category == 'pedestrian') {
+        // ĐỐI VỚI NGƯỜI ĐI BỘ:
+        // Người đứng sát chân (bottomY >= 0.85) dù diện tích nhỏ (thân người gầy) vẫn là cự ly nguy cấp
+        if (bottomY >= effectiveCriticalBottomY) {
+          distLevel = DistanceLevel.critical;
+          distText = '< 1.5m';
+        } else if (bottomY >= effectiveNearBottomY || areaRatio >= kNearAreaRatio) {
+          distLevel = DistanceLevel.near;
+          distText = '1.5m - 3.0m';
+        } else {
+          distLevel = DistanceLevel.far;
+          distText = '> 3.0m';
+        }
       } else {
-        distLevel = DistanceLevel.far;
-        distText = '> 3.0m';
+        // ĐỐI VỚI XE MÁY, Ô TÔ CON VÀ CÁC VẬT CẢN KHÁC:
+        if (bottomY >= effectiveCriticalBottomY ||
+            (bottomY >= effectiveNearBottomY && areaRatio >= kCriticalAreaRatio)) {
+          distLevel = DistanceLevel.critical;
+          distText = '< 1.5m';
+        } else if (bottomY >= effectiveNearBottomY || areaRatio >= kNearAreaRatio) {
+          distLevel = DistanceLevel.near;
+          distText = '1.5m - 3.0m';
+        } else {
+          distLevel = DistanceLevel.far;
+          distText = '> 3.0m';
+        }
       }
 
       // 6. XÁC ĐỊNH VẬT THỂ CÓ ĐANG LAO TỚI KHÔNG (isApproaching)

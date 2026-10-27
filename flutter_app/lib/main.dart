@@ -11,6 +11,7 @@ import 'services/detector_service.dart';
 import 'services/battery_optimizer.dart';
 import 'services/csv_logger.dart';
 import 'services/camera_pipeline_service.dart';
+import 'services/tilt_calibration_service.dart';
 import 'ui/accessible_screen.dart';
 
 void main() async {
@@ -40,6 +41,7 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
   late final DetectorService _detectorService;
   late final BatteryThermalOptimizer _batteryOptimizer;
   late final CsvLogger _csvLogger;
+  late final TiltCalibrationService _tiltService;
   late final CameraPipelineService _cameraPipeline;
 
   bool _isAppActive = false;
@@ -55,6 +57,7 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
     _detectorService = DetectorService();
     _batteryOptimizer = BatteryThermalOptimizer();
     _csvLogger = CsvLogger();
+    _tiltService = TiltCalibrationService();
 
     _cameraPipeline = CameraPipelineService(
       detectorService: _detectorService,
@@ -63,6 +66,7 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
       alertEngine: _alertEngine,
       batteryOptimizer: _batteryOptimizer,
       csvLogger: _csvLogger,
+      tiltService: _tiltService,
     );
 
     _initDetector();
@@ -128,6 +132,7 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
   @override
   void dispose() {
     _cameraPipeline.dispose();
+    _tiltService.dispose();
     try {
       WakelockPlus.disable();
     } catch (_) {}
