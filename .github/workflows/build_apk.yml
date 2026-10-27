@@ -94,6 +94,7 @@ jobs:
       - name: Prepare APK File
         if: success()
         run: |
+          cp flutter_app/build/app/outputs/flutter-apk/app-release.apk flutter_app/BeMyEyes-VN-v1.1.0.apk
           cp flutter_app/build/app/outputs/flutter-apk/app-release.apk flutter_app/BeMyEyes-VN-v1.0.0.apk
 
       - name: Upload APK Release Artifact
@@ -101,26 +102,37 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: BeMyEyes-VN-Release-APK
-          path: flutter_app/BeMyEyes-VN-v1.0.0.apk
+          path: |
+            flutter_app/BeMyEyes-VN-v1.1.0.apk
+            flutter_app/BeMyEyes-VN-v1.0.0.apk
 
       - name: Create GitHub Release with Direct Download
         if: success()
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.0
-          name: "Be My Eyes VN v1.0.0 (Release APK)"
+          tag_name: v1.1.0
+          name: "Be My Eyes VN v1.1.0 (Bản Hoàn Thiện NV1-NV11)"
+          make_latest: true
           body: |
-            ## 🎉 Be My Eyes VN - Ứng dụng Hỗ trợ Dẫn đường Cho Người Khiếm Thị
-            - **Phiên bản:** v1.0.0 (Release)
-            - **Hệ điều hành:** Android 8.0+ (API 26+)
-            - **Kiến trúc:** Flutter Native on-device 100% offline
-            - **Cảm biến & AI:** Camera + MobileNet SSD TensorFlow Lite Offline + Stereo Pan + GPS Smoothing + Digital Compass + Haptics Heartbeat.
-            
-            ### 📲 Hướng dẫn cài đặt:
-            1. Tải tệp `BeMyEyes-VN-v1.0.0.apk` bên dưới trực tiếp về điện thoại Android.
-            2. Mở file APK trên điện thoại để cài đặt (Cho phép cài đặt ứng dụng từ nguồn này nếu được hỏi).
-            3. Khởi chạy ứng dụng và bắt đầu hành trình an toàn!
+            ## 🎉 Be My Eyes VN v1.1.0 - Bản Phát Hành Hoàn Thiện (NV1 -> NV11)
+            **Trợ lý thị giác dẫn đường thời gian thực on-device cho người khiếm thị tại Việt Nam**
+
+            ### 🚀 Toàn bộ 11 Nhiệm vụ & Tính năng đã hoàn thành:
+            1. **Luồng Camera Native thời gian thực:** YUV420 → Isolate RGB 300x300 & Luma 160x120 → TFLite SSD MobileNet 91 nhãn COCO chuẩn (Hardware acceleration GPU / XNNPack CPU Fallback).
+            2. **Chống lặp TTS tiếng Việt:** Cooldown tối thiểu 3 giây theo ID mối nguy, chỉ ngắt câu khi có hiểm họa ưu tiên cao hơn hẳn.
+            3. **Thuật toán "Vật thể lao tới" & Ghép track 1-1:** Tính tốc độ tăng diện tích tương đối ((dArea/area)/dt), chỉ áp dụng cho phương tiện giao thông và bù trừ tốc độ đi bộ GPS.
+            4. **Ước lượng khoảng cách & Chặn báo nhầm xe lớn:** Bù trừ góc nghiêng ngực điện thoại (sensors_plus), xe buýt/xe tải ở xa không bị báo nhầm mức Nguy cấp.
+            5. **Phân tích Bậc thềm & Vỉa hè:** Yêu cầu cạnh ngang liền mạch, lọc bỏ vạch kẻ qua đường / khe gạch lát, hạ mức cam kết an toàn khi độ tin cậy chưa cao.
+            6. **Âm thanh Stereo Pan PCM chuẩn & Mono Fallback:** Sử dụng file PCM stereo vật lý cho 2 kênh Trái/Phải; phân biệt cao độ 500Hz - 750Hz - 1000Hz cho người chỉ đeo 1 tai nghe; hỗ trợ đảo kênh L/R.
+            7. **Điều tiết Năng lượng & Nhiệt độ thực (Android Thermal Status API):** Tự động hạ FPS khi pin < 20% hoặc khi quá nhiệt (Severe >= 3), giãn chu kỳ phân tích phụ để bảo vệ máy.
+            8. **Bảo mật & Quyền hạn tối giản:** Chỉ yêu cầu Camera, GPS, Rung, WakeLock, Internet; không có quyền nhạy cảm mic/danh bạ/bộ nhớ.
+            9. **Dẫn đường đi bộ OpenStreetMap / OSRM Foot Profile:** Tuyến đi bộ Turn-by-turn thực tế; tự động dùng cache khi mất mạng; **Safety Preemption:** Giọng nói camera nguy cấp luôn ngắt lời chỉ dẫn GPS.
+
+            ### 📲 Hướng dẫn cài đặt trực tiếp:
+            - Tải tệp `BeMyEyes-VN-v1.1.0.apk` bên dưới trực tiếp về điện thoại Android (Android 8.0 trở lên).
+            - Mở file APK để cài đặt và bắt đầu sử dụng.
           files: |
+            flutter_app/BeMyEyes-VN-v1.1.0.apk
             flutter_app/BeMyEyes-VN-v1.0.0.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
