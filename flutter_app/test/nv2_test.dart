@@ -54,11 +54,12 @@ void main() {
       expect(mappings.length, equals(15));
     });
 
-    test('parsePredictions áp dụng confidenceThreshold thật sự và lọc bỏ nhãn dưới ngưỡng', () async {
+    test('parsePredictions áp dụng confidenceThreshold thật sự và kLabelOffset = 1 (Lệch nhãn SSD)', () async {
       final detector = DetectorService(
         stringLoader: (_) async => List.generate(91, (i) {
           if (i == 1) return 'person';
           if (i == 4) return 'motorcycle';
+          if (i == 6) return 'bus';
           return '???';
         }).join('\n'),
         interpreterCreator: (_, {options}) => Future.error(Exception('mock interpreter offline')),
@@ -69,13 +70,16 @@ void main() {
       // Kiểm tra nhãn nạp thành công
       expect(detector.labels.length, equals(91));
 
+      // rawClasses xuất phát từ 0 theo chuẩn SSD MobileNet:
+      // 0.0 -> class 0 + offset 1 = index 1 ('person')
+      // 3.0 -> class 3 + offset 1 = index 4 ('motorcycle')
       final predictions = detector.parsePredictions(
         rawBoxes: [
           [0.1, 0.2, 0.5, 0.6], // person (ymin, xmin, ymax, xmax)
           [0.2, 0.3, 0.8, 0.9], // motorcycle
           [0.0, 0.0, 0.1, 0.1], // motorcycle nhưng score < threshold
         ],
-        rawClasses: [1.0, 4.0, 4.0],
+        rawClasses: [0.0, 3.0, 3.0],
         rawScores: [0.85, 0.92, 0.30], // 0.30 thấp hơn ngưỡng mặc định 0.45
         count: 3,
         imageWidth: 1000,
@@ -97,6 +101,38 @@ void main() {
       expect(predictions[1]['vietnameseClass'], equals('Người'));
       expect(predictions[1]['priority'], equals(4));
       expect(predictions[1]['bbox'], equals([200.0, 100.0, 400.0, 400.0]));
+    });
+
+    test('Kiểm tra biên kLabelOffset = 1: Bỏ qua chỉ số âm, vượt quá kích thước hoặc trúng ???', () async {
+      final detector = DetectorService(
+        stringLoader: (_) async => List.generate(91, (i) {
+          if (i == 1) return 'person';
+          if (i == 6) return 'bus';
+          return '???';
+        }).join('\n'),
+        interpreterCreator: (_, {options}) => Future.error(Exception('mock interpreter offline')),
+      );
+
+      await detector.loadModel();
+
+      final predictions = detector.parsePredictions(
+        rawBoxes: [
+          [0.1, 0.1, 0.5, 0.5], // Trúng ??? (class 1 -> 1+1=2 ???)
+          [0.1, 0.1, 0.5, 0.5], // class 5 -> 5+1=6 ('bus')
+          [0.1, 0.1, 0.5, 0.5], // Vượt biên (class 95)
+          [0.1, 0.1, 0.5, 0.5], // Chỉ số âm (-1)
+        ],
+        rawClasses: [1.0, 5.0, 95.0, -1.0],
+        rawScores: [0.90, 0.90, 0.90, 0.90],
+        count: 4,
+        imageWidth: 100,
+        imageHeight: 100,
+      );
+
+      // Chỉ có lớp 5 (bus) hợp lệ
+      expect(predictions.length, equals(1));
+      expect(predictions.first['class'], equals('bus'));
+      expect(predictions.first['vietnameseClass'], equals('Xe buýt'));
     });
 
     test('Báo lỗi to: Khi không tìm thấy file mô hình hoặc nhãn, loadError phải được lưu và isReady == false', () async {

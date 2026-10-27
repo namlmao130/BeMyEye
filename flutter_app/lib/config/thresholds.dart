@@ -133,6 +133,12 @@ int kHeartbeatDurationMs = 35;
 /// Đơn vị: Xác suất (0.0 -> 1.0).
 double kDefaultConfidenceThreshold = 0.45;
 
+/// Độ lệch chỉ số nhãn giữa đầu ra mô hình SSD MobileNet và labelmap.txt (NV12.1)
+/// Mô hình SSD MobileNet TFLite dự đoán class index từ 0 (0: person, 1: bicycle, 5: bus, ...)
+/// trong khi labelmap.txt có dòng đầu tiên là "???" (index 0).
+/// Do đó chỉ số nhãn thực tế phải là labels[classIndex + kLabelOffset].
+const int kLabelOffset = 1;
+
 // ============================================================================
 // 6. ĐIỀU TIẾT NĂNG LƯỢNG & NHIỆT ĐỘ (BATTERY / THERMAL)
 // ============================================================================

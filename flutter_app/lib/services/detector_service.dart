@@ -231,9 +231,12 @@ class DetectorService {
       if (score < confidenceThreshold) continue;
 
       final classIndex = rawClasses[i].toInt();
-      if (classIndex < 0 || classIndex >= _labels.length) continue;
+      // Áp dụng kLabelOffset = 1 (NV12.1): Mô hình SSD MobileNet đánh số từ 0 (0: person)
+      // trong khi labelmap.txt có dòng đầu tiên là "???" (index 0).
+      final effectiveIndex = classIndex + kLabelOffset;
+      if (classIndex < 0 || effectiveIndex < 0 || effectiveIndex >= _labels.length) continue;
 
-      final label = _labels[classIndex].toLowerCase();
+      final label = _labels[effectiveIndex].toLowerCase();
       if (label == '???' || label.isEmpty) continue;
 
       final mapping = classMappings[label];
