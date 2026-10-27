@@ -103,7 +103,7 @@ void main() {
     });
 
     test('CsvLogger ghi lại chính xác mức Pin và Trạng thái Nhiệt độ vào từng dòng CSV', () {
-      final logger = CsvLogger();
+      final logger = CsvLogger()..isLoggingEnabled = true;
 
       logger.logFrame(
         fps: 18.5,

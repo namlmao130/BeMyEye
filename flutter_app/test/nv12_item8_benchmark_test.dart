@@ -117,7 +117,7 @@ void main() {
     });
 
     test('Tiêu chí 4: Hàm exportCsv thông thường cũng có banner nhắc nhở dữ liệu thực địa', () {
-      final logger = CsvLogger();
+      final logger = CsvLogger()..isLoggingEnabled = true;
       logger.logFrame(
         fps: 20.0,
         latencyPreprocessMs: 5,
@@ -134,6 +134,63 @@ void main() {
       final csv = logger.exportCsv();
       expect(csv, contains('TRẠNG THÁI: DỮ LIỆU CẦN ĐO TRÊN THIẾT BỊ THẬT'));
       expect(csv, contains('fps,latency_preprocess_ms'));
+    });
+
+    test('Tiêu chí 5: Ở chế độ thường tắt hoàn toàn ghi CSV, chỉ ghi khi Benchmark hoạt động', () {
+      final logger = CsvLogger();
+      expect(logger.isLoggingEnabled, isFalse);
+      expect(logger.isBenchmarkRunning, isFalse);
+
+      // 1. Chế độ thường: logFrame() bị bỏ qua hoàn toàn để tối ưu FPS và bộ nhớ
+      logger.logFrame(
+        fps: 20.0,
+        latencyPreprocessMs: 5,
+        latencyInferenceMs: 38,
+        latencyAnalysisMs: 3,
+        latencyTotalMs: 46,
+        objectCount: 0,
+        primaryThreat: 'none',
+        threatDirection: 'none',
+        threatDistance: 'none',
+        delegate: 'NNAPI',
+      );
+      expect(logger.rowCount, equals(0));
+
+      // 2. Bắt đầu Benchmark: ghi nhận khung hình bình thường
+      logger.startBenchmark(durationSeconds: 180);
+      expect(logger.isBenchmarkRunning, isTrue);
+
+      logger.logFrame(
+        fps: 20.0,
+        latencyPreprocessMs: 5,
+        latencyInferenceMs: 38,
+        latencyAnalysisMs: 3,
+        latencyTotalMs: 46,
+        objectCount: 0,
+        primaryThreat: 'none',
+        threatDirection: 'none',
+        threatDistance: 'none',
+        delegate: 'NNAPI',
+      );
+      expect(logger.rowCount, equals(1));
+
+      // 3. Dừng Benchmark: ngay lập tức ngừng ghi nhận khung hình
+      logger.stopBenchmark();
+      expect(logger.isBenchmarkRunning, isFalse);
+
+      logger.logFrame(
+        fps: 20.0,
+        latencyPreprocessMs: 5,
+        latencyInferenceMs: 38,
+        latencyAnalysisMs: 3,
+        latencyTotalMs: 46,
+        objectCount: 0,
+        primaryThreat: 'none',
+        threatDirection: 'none',
+        threatDistance: 'none',
+        delegate: 'NNAPI',
+      );
+      expect(logger.rowCount, equals(1)); // Vẫn là 1, không tăng thêm
     });
   });
 }

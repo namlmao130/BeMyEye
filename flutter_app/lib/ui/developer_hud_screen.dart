@@ -294,6 +294,17 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                   ),
                   const SizedBox(height: 10),
                   Text(
+                    'Trạng thái ghi CSV: ${(pipeline?.csvLogger.isBenchmarkRunning ?? false) ? "Đang ghi (Phiên Benchmark)" : "Đã tắt (Tối ưu FPS chế độ thường)"}',
+                    style: TextStyle(
+                      color: (pipeline?.csvLogger.isBenchmarkRunning ?? false)
+                          ? const Color(0xFF22C55E)
+                          : const Color(0xFFFACC15),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
                     'Số bản ghi CSV hiện có: ${pipeline?.csvLogger.rowCount ?? 0} dòng',
                     style: const TextStyle(color: Colors.white70, fontSize: 13),
                   ),

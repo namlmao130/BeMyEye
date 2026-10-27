@@ -416,21 +416,24 @@ class CameraPipelineService {
         _lastFpsCalcTime = tAnalysisDone;
       }
 
-      // Ghi log CSV đo đạc thực địa
-      csvLogger.logFrame(
-        fps: currentFps,
-        latencyPreprocessMs: latencyPreprocessMs,
-        latencyInferenceMs: latencyInferenceMs,
-        latencyAnalysisMs: latencyAnalysisMs,
-        latencyTotalMs: latencyTotalMs,
-        objectCount: spatialHazards.length,
-        primaryThreat: threat?.vietnameseLabel ?? 'None',
-        threatDirection: threat?.direction.name ?? 'None',
-        threatDistance: threat?.approximateDistanceMeters ?? 'None',
-        delegate: detectorService.activeDelegate,
-        batteryLevel: batteryOptimizer.batteryLevel,
-        thermalStatus: batteryOptimizer.thermalStatus,
-      );
+      // Ghi log CSV đo đạc thực địa: Chỉ ghi khi chạy Benchmark (hoặc khi bật cờ kiểm thử)
+      // Tắt hoàn toàn ở chế độ thông thường để tối ưu FPS và không sinh rác bộ nhớ
+      if (csvLogger.isBenchmarkRunning || csvLogger.isLoggingEnabled) {
+        csvLogger.logFrame(
+          fps: currentFps,
+          latencyPreprocessMs: latencyPreprocessMs,
+          latencyInferenceMs: latencyInferenceMs,
+          latencyAnalysisMs: latencyAnalysisMs,
+          latencyTotalMs: latencyTotalMs,
+          objectCount: spatialHazards.length,
+          primaryThreat: threat?.vietnameseLabel ?? 'None',
+          threatDirection: threat?.direction.name ?? 'None',
+          threatDistance: threat?.approximateDistanceMeters ?? 'None',
+          delegate: detectorService.activeDelegate,
+          batteryLevel: batteryOptimizer.batteryLevel,
+          thermalStatus: batteryOptimizer.thermalStatus,
+        );
+      }
 
       onFrameProcessed?.call();
     } catch (e) {

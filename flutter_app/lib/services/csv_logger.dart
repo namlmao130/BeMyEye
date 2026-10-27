@@ -64,6 +64,12 @@ class CsvLogger {
   final ListQueue<CsvLogEntry> _entries = ListQueue<CsvLogEntry>();
   static const int maxEntries = 5000;
 
+  /// Cờ kiểm soát việc ghi log:
+  /// - Mặc định là false (tắt hoàn toàn ở chế độ thông thường để tối ưu FPS và triệt tiêu cấp phát rác GC).
+  /// - Tự động ghi khi isBenchmarkRunning == true (chế độ đo đạc).
+  /// - Có thể bật isLoggingEnabled = true để phục vụ Unit Tests hoặc kiểm tra thủ công.
+  bool isLoggingEnabled = false;
+
   // Trạng thái chế độ Benchmark đo hiệu năng 3 phút
   bool isBenchmarkRunning = false;
   int benchmarkStartTimeMs = 0;
@@ -119,6 +125,12 @@ class CsvLogger {
     int thermalStatus = 0,
     int? customNowMs,
   }) {
+    // Chỉ ghi CSV khi chạy Benchmark hoặc khi bật isLoggingEnabled (kiểm thử)
+    // Tắt hoàn toàn ở chế độ thường để đạt FPS tối đa và triệt tiêu Garbage Collection churn
+    if (!isBenchmarkRunning && !isLoggingEnabled) {
+      return;
+    }
+
     final entry = CsvLogEntry(
       timestamp: DateTime.now().toIso8601String(),
       fps: fps,

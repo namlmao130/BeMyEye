@@ -78,7 +78,7 @@ void main() {
 
   group('NV3 - Công cụ đo đạc thực địa CSV Logger', () {
     test('CsvLogger ghi nhận đúng thông số và xuất định dạng CSV hợp lệ', () {
-      final logger = CsvLogger();
+      final logger = CsvLogger()..isLoggingEnabled = true;
       expect(logger.rowCount, equals(0));
 
       logger.logFrame(
