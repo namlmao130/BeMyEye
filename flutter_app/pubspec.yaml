@@ -61,3 +61,6 @@ flutter:
     - assets/sounds/beep_left.wav
     - assets/sounds/beep_center.wav
     - assets/sounds/beep_right.wav
+    - assets/sounds/step_down.wav
+    - assets/sounds/beep_low.wav
+    - assets/sounds/beep_high.wav

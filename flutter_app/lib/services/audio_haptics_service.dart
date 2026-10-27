@@ -27,6 +27,10 @@ class AudioHapticsService {
   // Tùy chọn đảo kênh (khi người dùng đeo ngược tai nghe L/R)
   bool isChannelsSwapped = false;
   String lastPlayedAsset = '';
+  int lastPlayedPitch = 0;
+  int lastPlayedDurationMs = 0;
+  double lastPlayedPlaybackRate = 1.0;
+  bool lastIsNegativeObstacle = false;
 
   AudioHapticsService({SpeechSpeaker? customSpeaker}) : _customSpeaker = customSpeaker {
     _initTTS();
@@ -47,51 +51,79 @@ class AudioHapticsService {
   /// - Kênh Trái: 'sounds/beep_left.wav' (500 Hz, Left 100%, Right 0%)
   /// - Kênh Giữa: 'sounds/beep_center.wav' (750 Hz, Cân bằng cả 2 tai)
   /// - Kênh Phải: 'sounds/beep_right.wav' (1000 Hz, Left 0%, Right 100%)
+  /// - Bậc đi xuống / Vật cản âm: 'sounds/step_down.wav' (Âm trầm trượt dốc 420Hz -> 220Hz đặc thù)
   ///
   /// Mono Fallback: Người dùng đeo 1 tai nghe vẫn phân biệt được hướng
-  /// nhờ cao độ khác nhau rõ rệt (Trái: Trầm 500Hz, Giữa: Trung 750Hz, Phải: Thanh 1000Hz)
+  /// nhờ cao độ khác nhau rõ rệt (Trái: Trầm 500Hz, Giữa: Trung 750Hz, Phải: Thanh 1000Hz).
+  /// Tôn trọng pitch và durationMs qua tốc độ phát và lựa chọn file âm thanh phù hợp.
   Future<void> playDirectionalBeep({
     required double pan,
     required int pitch,
     int durationMs = 60,
     DirectionZone? direction,
+    bool isNegativeObstacle = false,
   }) async {
-    try {
-      DirectionZone effectiveDir;
-      if (direction != null) {
-        effectiveDir = direction;
-      } else if (pan < -0.25) {
-        effectiveDir = DirectionZone.left;
-      } else if (pan > 0.25) {
-        effectiveDir = DirectionZone.right;
-      } else {
-        effectiveDir = DirectionZone.center;
-      }
+    lastPlayedPitch = pitch;
+    lastPlayedDurationMs = durationMs;
+    lastIsNegativeObstacle = isNegativeObstacle;
 
-      // Đảo kênh nếu người dùng bật tùy chọn đeo ngược tai nghe
-      if (isChannelsSwapped) {
-        if (effectiveDir == DirectionZone.left) {
-          effectiveDir = DirectionZone.right;
-        } else if (effectiveDir == DirectionZone.right) {
+    try {
+      String soundAsset;
+      double baseFreq;
+
+      // Tiếng "bậc đi xuống" (vật cản âm) chuyên biệt: âm trầm tụt dốc, hoàn toàn khác tiếng bíp thường
+      if (isNegativeObstacle || pitch <= 340) {
+        soundAsset = 'sounds/step_down.wav';
+        baseFreq = 320.0;
+      } else {
+        DirectionZone effectiveDir;
+        if (direction != null) {
+          effectiveDir = direction;
+        } else if (pan < -0.25) {
           effectiveDir = DirectionZone.left;
+        } else if (pan > 0.25) {
+          effectiveDir = DirectionZone.right;
+        } else {
+          effectiveDir = DirectionZone.center;
+        }
+
+        // Đảo kênh nếu người dùng bật tùy chọn đeo ngược tai nghe
+        if (isChannelsSwapped) {
+          if (effectiveDir == DirectionZone.left) {
+            effectiveDir = DirectionZone.right;
+          } else if (effectiveDir == DirectionZone.right) {
+            effectiveDir = DirectionZone.left;
+          }
+        }
+
+        switch (effectiveDir) {
+          case DirectionZone.left:
+            soundAsset = 'sounds/beep_left.wav';
+            baseFreq = 500.0;
+            break;
+          case DirectionZone.right:
+            soundAsset = 'sounds/beep_right.wav';
+            baseFreq = 1000.0;
+            break;
+          case DirectionZone.center:
+          default:
+            soundAsset = 'sounds/beep_center.wav';
+            baseFreq = 750.0;
+            break;
         }
       }
 
-      String soundAsset;
-      switch (effectiveDir) {
-        case DirectionZone.left:
-          soundAsset = 'sounds/beep_left.wav';
-          break;
-        case DirectionZone.right:
-          soundAsset = 'sounds/beep_right.wav';
-          break;
-        case DirectionZone.center:
-        default:
-          soundAsset = 'sounds/beep_center.wav';
-          break;
-      }
-
+      // Tôn trọng pitch bằng cách điều chỉnh tốc độ phát playbackRate
+      final double playbackRate = (pitch > 0 && baseFreq > 0)
+          ? (pitch / baseFreq).clamp(0.5, 2.0)
+          : 1.0;
+      lastPlayedPlaybackRate = playbackRate;
       lastPlayedAsset = soundAsset;
+
+      try {
+        await _player.setPlaybackRate(playbackRate);
+      } catch (_) {}
+
       await _player.play(AssetSource(soundAsset), volume: 0.90);
     } catch (_) {
       // Tránh crash nếu thiết bị chưa cắm tai nghe hoặc đang bận

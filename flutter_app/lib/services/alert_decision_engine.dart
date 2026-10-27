@@ -236,6 +236,7 @@ class AlertDecisionEngine {
         pitch: 320,
         durationMs: 110,
         direction: DirectionZone.center,
+        isNegativeObstacle: true,
       );
       audio.triggerHaptic(HapticIntensity.critical);
       return;
