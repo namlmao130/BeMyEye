@@ -17,9 +17,16 @@ class BatteryThermalOptimizer {
   int _batteryLevel = 100;
   int _thermalStatus = 0;
 
-  int _lastExecutionTime = 0;
-  int _lastGroundExecutionTime = 0;
-  int _lastThermalWarningTime = 0;
+  int? _lastExecutionTime;
+  int? _lastGroundExecutionTime;
+  int? _lastThermalWarningTime;
+
+  /// A new camera session must process its first frame and ground sample.
+  void resetTiming() {
+    _lastExecutionTime = null;
+    _lastGroundExecutionTime = null;
+    _lastThermalWarningTime = null;
+  }
 
   int get batteryLevel => _batteryLevel;
   int get thermalStatus => _thermalStatus;
@@ -65,7 +72,7 @@ class BatteryThermalOptimizer {
 
   /// Kiểm tra xem có nên xử lý khung hình Camera hiện tại hay bỏ qua (Frame-Dropping)
   bool shouldProcessFrame(int currentTimeMs) {
-    if (currentTimeMs - _lastExecutionTime >= minFrameIntervalMs) {
+    if (_lastExecutionTime == null || currentTimeMs - _lastExecutionTime! >= minFrameIntervalMs) {
       _lastExecutionTime = currentTimeMs;
       return true;
     }
@@ -80,7 +87,7 @@ class BatteryThermalOptimizer {
         ? kGroundIntervalLowBatteryMs
         : kGroundIntervalNormalMs;
 
-    if (currentTimeMs - _lastGroundExecutionTime >= interval) {
+    if (_lastGroundExecutionTime == null || currentTimeMs - _lastGroundExecutionTime! >= interval) {
       _lastGroundExecutionTime = currentTimeMs;
       return true;
     }
@@ -91,7 +98,7 @@ class BatteryThermalOptimizer {
   bool shouldAnnounceThermalWarning(int currentTimeMs) {
     if (!isOverheated) return false;
 
-    if (currentTimeMs - _lastThermalWarningTime >= kThermalWarningCooldownMs) {
+    if (_lastThermalWarningTime == null || currentTimeMs - _lastThermalWarningTime! >= kThermalWarningCooldownMs) {
       _lastThermalWarningTime = currentTimeMs;
       return true;
     }

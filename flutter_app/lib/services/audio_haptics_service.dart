@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:vibration/vibration.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -14,13 +17,20 @@ enum HapticIntensity { near, critical }
 typedef SpeechSpeaker = Future<void> Function(String text);
 
 class AudioHapticsService {
-  final FlutterTts _tts = FlutterTts();
-  final AudioPlayer _player = AudioPlayer();
+  FlutterTts? _ttsInstance;
+  AudioPlayer? _playerInstance;
+  FlutterTts get _tts => _ttsInstance ??= FlutterTts();
+  AudioPlayer get _player => _playerInstance ??= AudioPlayer();
   final SpeechSpeaker? _customSpeaker;
+  final bool _hardwareEnabled;
+  bool _disposed = false;
+  int _speechGeneration = 0;
+  int _beepGeneration = 0;
+  Timer? _beepStopTimer;
+  Future<void>? _ttsReady;
 
-  int _lastSpeechTime = 0;
+  int? _lastSpeechTime;
   int _currentSpeakingPriority = 0;
-  String _currentSpeakingText = '';
   int speechInvocationCount = 0;
   final List<String> spokenHistory = [];
 
@@ -32,8 +42,12 @@ class AudioHapticsService {
   double lastPlayedPlaybackRate = 1.0;
   bool lastIsNegativeObstacle = false;
 
-  AudioHapticsService({SpeechSpeaker? customSpeaker}) : _customSpeaker = customSpeaker {
-    _initTTS();
+  // Custom speakers provide an output adapter for tests/previews without
+  // initializing native plugins. Hardware can explicitly be enabled alongside it.
+  AudioHapticsService({SpeechSpeaker? customSpeaker, bool? hardwareEnabled})
+      : _customSpeaker = customSpeaker,
+        _hardwareEnabled = hardwareEnabled ?? customSpeaker == null {
+    if (_hardwareEnabled) _ttsReady = _initTTS();
   }
 
   Future<void> _initTTS() async {
@@ -42,8 +56,8 @@ class AudioHapticsService {
       await _tts.setSpeechRate(0.65); // Tốc độ nhanh dứt khoát
       await _tts.setPitch(1.0);
       await _tts.awaitSpeakCompletion(true);
-    } catch (_) {
-      // Bỏ qua trên môi trường test không có engine TTS
+    } catch (e) {
+      debugPrint('Không thể khởi tạo engine TTS tiếng Việt: $e');
     }
   }
 
@@ -63,6 +77,9 @@ class AudioHapticsService {
     DirectionZone? direction,
     bool isNegativeObstacle = false,
   }) async {
+    if (_disposed) return;
+    final generation = ++_beepGeneration;
+    _beepStopTimer?.cancel();
     lastPlayedPitch = pitch;
     lastPlayedDurationMs = durationMs;
     lastIsNegativeObstacle = isNegativeObstacle;
@@ -119,14 +136,23 @@ class AudioHapticsService {
           : 1.0;
       lastPlayedPlaybackRate = playbackRate;
       lastPlayedAsset = soundAsset;
+      if (!_hardwareEnabled) return;
 
       try {
         await _player.setPlaybackRate(playbackRate);
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Không thể đặt playback rate cho âm cảnh báo: $e');
+      }
 
       await _player.play(AssetSource(soundAsset), volume: 0.90);
-    } catch (_) {
-      // Tránh crash nếu thiết bị chưa cắm tai nghe hoặc đang bận
+      if (_disposed || generation != _beepGeneration) return;
+      _beepStopTimer = Timer(Duration(milliseconds: durationMs), () {
+        if (!_disposed && generation == _beepGeneration) {
+          unawaited(_stopBeep());
+        }
+      });
+    } catch (e) {
+      debugPrint('Không thể phát âm cảnh báo định hướng: $e');
     }
   }
 
@@ -165,26 +191,24 @@ class AudioHapticsService {
     int priority = 0,
     int? customNow,
   }) async {
+    if (_disposed) return;
     final int now = customNow ?? DateTime.now().millisecondsSinceEpoch;
-    final int elapsed = now - _lastSpeechTime;
+    final int elapsed = _lastSpeechTime == null ? kSpeechCooldownMs : now - _lastSpeechTime!;
 
     if (elapsed < kSpeechCooldownMs) {
-      if (!force || priority <= _currentSpeakingPriority + 40) {
+      if (!force || priority < _currentSpeakingPriority + kSpeechInterruptPriorityDelta) {
         return;
       }
     }
 
-    if (force && priority > _currentSpeakingPriority) {
-      try {
-        await _tts.stop();
-      } catch (_) {}
-    }
-
+    final interrupt = priority >= _currentSpeakingPriority + kSpeechInterruptPriorityDelta;
+    final generation = ++_speechGeneration;
+    // Reserve synchronously so two callers cannot both pass the cooldown gate.
     _lastSpeechTime = now;
     _currentSpeakingPriority = priority;
-    _currentSpeakingText = text;
     speechInvocationCount++;
     spokenHistory.add(text);
+    if (spokenHistory.length > kSpeechHistoryLimit) spokenHistory.removeAt(0);
 
     final speaker = _customSpeaker;
     if (speaker != null) {
@@ -192,39 +216,76 @@ class AudioHapticsService {
       return;
     }
 
+    if (!_hardwareEnabled) return;
     try {
+      await _ttsReady;
+      if (_disposed || generation != _speechGeneration) return;
+      if (interrupt) await _tts.stop();
+      if (_disposed || generation != _speechGeneration) return;
       await _tts.speak(text);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Không thể phát cảnh báo TTS: $e');
+      await triggerHaptic(HapticIntensity.critical);
+    }
   }
 
   /// Rung xúc giác phản hồi
   Future<void> triggerHaptic(HapticIntensity intensity) async {
+    if (_disposed || !_hardwareEnabled) return;
     try {
       final bool? hasVibrator = await Vibration.hasVibrator();
       if (hasVibrator != true) return;
 
       if (intensity == HapticIntensity.critical) {
-        Vibration.vibrate(pattern: [0, 150, 50, 200]);
+        await Vibration.vibrate(pattern: [0, 150, 50, 200]);
       } else {
-        Vibration.vibrate(duration: 70);
+        await Vibration.vibrate(duration: 70);
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Không thể phát rung cảnh báo: $e');
+    }
   }
 
   /// Nhịp đập giữ liên lạc (Heartbeat Pulse): Rung siêu nhẹ 35ms
   Future<void> triggerHeartbeatHaptic() async {
+    if (_disposed || !_hardwareEnabled) return;
     try {
       final bool? hasVibrator = await Vibration.hasVibrator();
       if (hasVibrator == true) {
-        Vibration.vibrate(duration: kHeartbeatDurationMs);
+        await Vibration.vibrate(duration: kHeartbeatDurationMs);
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Không thể phát heartbeat haptic: $e');
+    }
   }
 
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _speechGeneration++;
+    _beepGeneration++;
+    _beepStopTimer?.cancel();
+    unawaited(_disposeAsync());
+  }
+
+  Future<void> _stopBeep() async {
     try {
-      _tts.stop();
-      _player.dispose();
-    } catch (_) {}
+      await _playerInstance?.stop();
+    } catch (e) {
+      debugPrint('Không thể dừng âm cảnh báo: $e');
+    }
+  }
+
+  Future<void> _disposeAsync() async {
+    try {
+      await _ttsInstance?.stop();
+    } catch (e) {
+      debugPrint('Không thể dừng TTS khi giải phóng: $e');
+    }
+    try {
+      await _playerInstance?.dispose();
+    } catch (e) {
+      debugPrint('Không thể giải phóng trình phát âm: $e');
+    }
   }
 }

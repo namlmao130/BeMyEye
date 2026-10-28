@@ -11,8 +11,13 @@ local.properties
 .dart_tool/
 .packages
 pubspec.lock
+!flutter_app/pubspec.lock
 .flutter-plugins
 .flutter-plugins-dependencies
+.tools/
+.pub-cache/
+__pycache__/
+coverage/
 
 # IDEs & OS
 .idea/
@@ -28,6 +33,7 @@ certs/
 *.p12
 *.jks
 *.keystore
+key.properties
 *.env
 *.env.*
 

@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import '../config/thresholds.dart';
@@ -172,7 +174,8 @@ class NavigationService {
         _cachedRoute = parsedWaypoints;
         return parsedWaypoints;
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Không thể tải lộ trình OSRM: $e');
       // Khi mất mạng hoặc timeout, kiểm tra bộ nhớ đệm
       if (_cachedRoute.isNotEmpty) {
         return _cachedRoute;
@@ -190,8 +193,8 @@ class NavigationService {
     double? fallbackStartLng,
   }) async {
     // 1. Kiểm tra vị trí hiện tại
-    double sLat = _smoothedLat ?? fallbackStartLat ?? hanoiStartLat;
-    double sLng = _smoothedLng ?? fallbackStartLng ?? hanoiStartLng;
+    double? sLat = _smoothedLat ?? fallbackStartLat;
+    double? sLng = _smoothedLng ?? fallbackStartLng;
 
     // Lấy vị trí GPS thật nếu có quyền
     try {
@@ -200,7 +203,24 @@ class NavigationService {
       );
       sLat = pos.latitude;
       sLng = pos.longitude;
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Không thể lấy vị trí GPS hiện tại: $e');
+      if (sLat == null || sLng == null) {
+        audio.speakVietnamese(
+          'Không xác định được vị trí hiện tại, chưa thể bắt đầu dẫn đường',
+          force: true,
+        );
+        return false;
+      }
+    }
+
+    if (sLat == null || sLng == null) {
+      audio.speakVietnamese(
+        'Không xác định được vị trí hiện tại, chưa thể bắt đầu dẫn đường',
+        force: true,
+      );
+      return false;
+    }
 
     // 2. Gọi OSRM lấy lộ trình đi bộ
     final route = await fetchOsrmRoute(
@@ -245,6 +265,7 @@ class NavigationService {
       if (permission == LocationPermission.denied) {
         final requested = await Geolocator.requestPermission();
         if (requested == LocationPermission.denied || requested == LocationPermission.deniedForever) {
+          _isNavigating = false;
           audio.speakVietnamese('Chưa cấp quyền truy cập vị trí GPS', force: true);
           return false;
         }
@@ -258,20 +279,30 @@ class NavigationService {
       _positionSub = Geolocator.getPositionStream(locationSettings: locationSettings).listen((pos) {
         _handleGPSUpdate(pos);
       });
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Không thể khởi động luồng GPS: $e');
+      _isNavigating = false;
+      audio.speakVietnamese(
+        'Không thể khởi động GPS, chỉ dùng được chế độ phát hiện vật cản',
+        force: true,
+      );
+      return false;
+    }
 
     audio.speakVietnamese('Bắt đầu lộ trình dẫn đường', force: true, priority: kGpsSpeechPriority);
     return true;
   }
 
-  void stopNavigation() {
+  void stopNavigation({bool announce = true}) {
     _isNavigating = false;
     _positionSub?.cancel();
     _positionSub = null;
     if (_isSimulating) {
       stopSimulation();
     }
-    audio.speakVietnamese('Đã kết thúc lộ trình', force: true, priority: kGpsSpeechPriority);
+    if (announce) {
+      audio.speakVietnamese('Đã kết thúc lộ trình', force: true, priority: kGpsSpeechPriority);
+    }
   }
 
   void _handleGPSUpdate(Position pos) {

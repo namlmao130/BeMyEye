@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:math';
+
+import 'package:flutter/foundation.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import '../config/thresholds.dart';
 
@@ -28,11 +30,13 @@ class TiltCalibrationService {
             currentPitchRad = atan2(event.z, event.y);
           }
         },
-        onError: (_) {
+        onError: (Object error) {
+          debugPrint('Luồng cảm biến gia tốc gặp lỗi: $error');
           isSensorAvailable = false;
         },
       );
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Không thể khởi động cảm biến gia tốc: $e');
       isSensorAvailable = false;
     }
   }

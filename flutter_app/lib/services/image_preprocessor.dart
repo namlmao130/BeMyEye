@@ -1,17 +1,6 @@
 import 'dart:typed_data';
 
-/// image_preprocessor.dart
-/// Xử lý biến đổi và nắn chỉnh kích thước khung hình camera siêu tốc (Zero Allocation, LUT Optimized)
-/// Chuyển đổi YUV420 -> RGB 300x300 (uint8) cho SSD MobileNet
-/// và YUV420 -> Luma 160x120 (uint8) cho GroundPlaneAnalyzer
-/// Xoay ảnh chính xác theo sensorOrientation của camera điện thoại gắn ngực.
-///
-/// TỐI ƯU HÓA HIỆU NĂNG CAO:
-/// - Tiền tính toán bảng tra cứu tọa độ (Coordinate Lookup Table - LUT)
-/// - Đưa hằng số dòng và phép tính UV ra ngoài vòng lặp trong
-/// - Loại bỏ hoàn toàn phép chia nguyên (~/) và switch bên trong vòng lặp điểm ảnh
-/// - Tái sử dụng bộ đệm (reusable buffers) để tránh Garbage Collection gây giật lag
-
+/// Camera plane data is borrowed only for synchronous processing of the callback.
 class CameraFrameData {
   final Uint8List yPlane;
   final Uint8List? uPlane;
@@ -20,9 +9,12 @@ class CameraFrameData {
   final int uvRowStride;
   final int yPixelStride;
   final int uvPixelStride;
+  final int? vRowStride;
+  final int? vPixelStride;
   final int width;
   final int height;
   final int sensorOrientation;
+  final bool isBgra;
 
   CameraFrameData({
     required this.yPlane,
@@ -32,15 +24,18 @@ class CameraFrameData {
     this.uvRowStride = 0,
     required this.yPixelStride,
     this.uvPixelStride = 1,
+    this.vRowStride,
+    this.vPixelStride,
     required this.width,
     required this.height,
     required this.sensorOrientation,
+    this.isBgra = false,
   });
 }
 
 class PreprocessedFrame {
-  final Uint8List rgb300;   // 300 x 300 x 3 = 270,000 bytes
-  final Uint8List luma160;  // 160 x 120 = 19,200 bytes
+  final Uint8List rgb300;
+  final Uint8List luma160;
   final int preprocessDurationMs;
 
   PreprocessedFrame({
@@ -50,298 +45,154 @@ class PreprocessedFrame {
   });
 }
 
-/// Hàm chuyển đổi tối ưu siêu tốc (chạy mượt mà trực tiếp trên mọi smartphone tầm trung)
+/// One camera geometry is active at a time. Cache offsets across frames, including
+/// row padding, chroma pixel stride, and rotation; no LUT arrays per video frame.
+_SamplingMap? _cachedMap;
+
+class _SamplingMap {
+  final int width, height, rotation, yRow, yPixel, uRow, uPixel, vRow, vPixel;
+  final Int32List rgbY = Int32List(300 * 300);
+  final Int32List rgbU = Int32List(300 * 300);
+  final Int32List rgbV = Int32List(300 * 300);
+  final Int32List lumaY = Int32List(160 * 120);
+
+  _SamplingMap(CameraFrameData data)
+      : width = data.width,
+        height = data.height,
+        rotation = data.sensorOrientation,
+        yRow = data.yRowStride,
+        yPixel = data.isBgra ? 4 : data.yPixelStride,
+        uRow = data.uvRowStride > 0 ? data.uvRowStride : (data.width + 1) ~/ 2,
+        uPixel = data.uvPixelStride,
+        vRow = data.vRowStride ?? (data.uvRowStride > 0 ? data.uvRowStride : (data.width + 1) ~/ 2),
+        vPixel = data.vPixelStride ?? data.uvPixelStride {
+    _fill(rgbY, 300, 300, chroma: true);
+    _fill(lumaY, 160, 120, chroma: false);
+  }
+
+  bool matches(CameraFrameData data) =>
+      width == data.width && height == data.height && rotation == data.sensorOrientation &&
+      yRow == data.yRowStride && yPixel == (data.isBgra ? 4 : data.yPixelStride) &&
+      uRow == (data.uvRowStride > 0 ? data.uvRowStride : (data.width + 1) ~/ 2) &&
+      uPixel == data.uvPixelStride &&
+      vRow == (data.vRowStride ?? (data.uvRowStride > 0 ? data.uvRowStride : (data.width + 1) ~/ 2)) &&
+      vPixel == (data.vPixelStride ?? data.uvPixelStride);
+
+  void _fill(Int32List destination, int outWidth, int outHeight, {required bool chroma}) {
+    var index = 0;
+    for (var y = 0; y < outHeight; y++) {
+      for (var x = 0; x < outWidth; x++) {
+        final int sourceX;
+        final int sourceY;
+        switch (rotation) {
+          case 90:
+            sourceX = y * width ~/ outHeight;
+            sourceY = (outWidth - 1 - x) * height ~/ outWidth;
+            break;
+          case 180:
+            sourceX = (outWidth - 1 - x) * width ~/ outWidth;
+            sourceY = (outHeight - 1 - y) * height ~/ outHeight;
+            break;
+          case 270:
+            sourceX = (outHeight - 1 - y) * width ~/ outHeight;
+            sourceY = x * height ~/ outWidth;
+            break;
+          default:
+            sourceX = x * width ~/ outWidth;
+            sourceY = y * height ~/ outHeight;
+        }
+        destination[index] = sourceY * yRow + sourceX * yPixel;
+        if (chroma) {
+          rgbU[index] = (sourceY >> 1) * uRow + (sourceX >> 1) * uPixel;
+          rgbV[index] = (sourceY >> 1) * vRow + (sourceX >> 1) * vPixel;
+        }
+        index++;
+      }
+    }
+  }
+}
+
+void _validatePlane(Uint8List plane, int width, int height, int rowStride, int pixelStride,
+    {int bytesPerPixel = 1}) {
+  if (rowStride <= 0 || pixelStride <= 0 ||
+      rowStride < (width - 1) * pixelStride + bytesPerPixel ||
+      plane.length < (height - 1) * rowStride + (width - 1) * pixelStride + bytesPerPixel) {
+    throw ArgumentError('Camera plane bị thiếu dữ liệu hoặc stride không hợp lệ');
+  }
+}
+
+int _saturate(int value) => value < 0 ? 0 : (value > 255 ? 255 : value);
+
 PreprocessedFrame preprocessCameraFrame(
   CameraFrameData data, {
   Uint8List? reusableRgb300,
   Uint8List? reusableLuma160,
 }) {
   final stopwatch = Stopwatch()..start();
-
-  const int targetRgbW = 300;
-  const int targetRgbH = 300;
-  const int targetLumaW = 160;
-  const int targetLumaH = 120;
-
-  final Uint8List rgb300 = reusableRgb300 ?? Uint8List(targetRgbW * targetRgbH * 3);
-  final Uint8List luma160 = reusableLuma160 ?? Uint8List(targetLumaW * targetLumaH);
-
-  final int srcW = data.width;
-  final int srcH = data.height;
-  final int rotation = data.sensorOrientation;
-
-  final Uint8List yPlane = data.yPlane;
-  final Uint8List? uPlane = data.uPlane;
-  final Uint8List? vPlane = data.vPlane;
-
-  final int yLen = yPlane.length;
-  final int uLen = uPlane?.length ?? 0;
-  final int vLen = vPlane?.length ?? 0;
-
-  final int yRowStride = data.yRowStride;
-  final int uvRowStride = data.uvRowStride > 0 ? data.uvRowStride : (srcW >> 1);
-  final int yPixelStride = data.yPixelStride > 0 ? data.yPixelStride : 1;
-  final int uvPixelStride = data.uvPixelStride > 0 ? data.uvPixelStride : 1;
-
-  final bool hasChroma = (uPlane != null && vPlane != null && uLen > 0 && vLen > 0);
-
-  // 1. CHUYỂN ĐỔI YUV -> RGB 300x300 TỐI ƯU HÓA THEO GÓC QUAY
-  if (rotation == 90) {
-    // 90 ĐỘ (Phổ biến nhất trên 95% camera sau Android khi cầm/đeo dọc)
-    // srcX phụ thuộc outY, srcY phụ thuộc outX
-    final lutSrcX = Int32List(targetRgbH);
-    for (int y = 0; y < targetRgbH; y++) {
-      lutSrcX[y] = ((y * srcW) ~/ targetRgbH).clamp(0, srcW - 1);
+  if (data.width <= 0 || data.height <= 0 ||
+      !const [0, 90, 180, 270].contains(data.sensorOrientation)) {
+    throw ArgumentError('Kích thước hoặc góc xoay camera không hợp lệ');
+  }
+  if ((reusableRgb300 != null && reusableRgb300.length != 300 * 300 * 3) ||
+      (reusableLuma160 != null && reusableLuma160.length != 160 * 120)) {
+    throw ArgumentError('Kích thước bộ đệm ảnh không hợp lệ');
+  }
+  _validatePlane(data.yPlane, data.width, data.height, data.yRowStride,
+      data.isBgra ? 4 : data.yPixelStride, bytesPerPixel: data.isBgra ? 4 : 1);
+  final hasChroma = data.uPlane != null || data.vPlane != null;
+  if (hasChroma && (data.isBgra || data.uPlane == null || data.vPlane == null)) {
+    throw ArgumentError('Camera YUV cần đủ cả hai plane U và V');
+  }
+  final uvWidth = (data.width + 1) ~/ 2;
+  final uvHeight = (data.height + 1) ~/ 2;
+  final uvRow = data.uvRowStride > 0 ? data.uvRowStride : uvWidth;
+  if (hasChroma) {
+    _validatePlane(data.uPlane!, uvWidth, uvHeight, uvRow, data.uvPixelStride);
+    _validatePlane(data.vPlane!, uvWidth, uvHeight,
+        data.vRowStride ?? uvRow, data.vPixelStride ?? data.uvPixelStride);
+  }
+  final map = _cachedMap != null && _cachedMap!.matches(data)
+      ? _cachedMap!
+      : (_cachedMap = _SamplingMap(data));
+  final rgb = reusableRgb300 ?? Uint8List(300 * 300 * 3);
+  final luma = reusableLuma160 ?? Uint8List(160 * 120);
+  final input = data.yPlane;
+  var output = 0;
+  if (data.isBgra) {
+    for (var i = 0; i < map.rgbY.length; i++) {
+      final offset = map.rgbY[i];
+      rgb[output++] = input[offset + 2];
+      rgb[output++] = input[offset + 1];
+      rgb[output++] = input[offset];
     }
-    final lutSrcY = Int32List(targetRgbW);
-    for (int x = 0; x < targetRgbW; x++) {
-      lutSrcY[x] = (((targetRgbW - 1 - x) * srcH) ~/ targetRgbW).clamp(0, srcH - 1);
-    }
-
-    int outIdx = 0;
-    for (int outY = 0; outY < targetRgbH; outY++) {
-      final int srcX = lutSrcX[outY];
-      final int xOffset = srcX * yPixelStride;
-      final int uvXOffset = (srcX >> 1) * uvPixelStride;
-
-      if (hasChroma) {
-        for (int outX = 0; outX < targetRgbW; outX++) {
-          final int srcY = lutSrcY[outX];
-          final int yIdx = srcY * yRowStride + xOffset;
-          final int yVal = (yIdx < yLen) ? yPlane[yIdx] : 0;
-
-          final int uvIdx = (srcY >> 1) * uvRowStride + uvXOffset;
-          final int uDiff = ((uvIdx < uLen) ? uPlane![uvIdx] : 128) - 128;
-          final int vDiff = ((uvIdx < vLen) ? vPlane![uvIdx] : 128) - 128;
-
-          rgb300[outIdx++] = (yVal + ((359 * vDiff) >> 8)).clamp(0, 255);
-          rgb300[outIdx++] = (yVal - ((88 * uDiff + 183 * vDiff) >> 8)).clamp(0, 255);
-          rgb300[outIdx++] = (yVal + ((454 * uDiff) >> 8)).clamp(0, 255);
-        }
-      } else {
-        for (int outX = 0; outX < targetRgbW; outX++) {
-          final int srcY = lutSrcY[outX];
-          final int yIdx = srcY * yRowStride + xOffset;
-          final int yVal = (yIdx < yLen) ? yPlane[yIdx] : 0;
-          rgb300[outIdx++] = yVal;
-          rgb300[outIdx++] = yVal;
-          rgb300[outIdx++] = yVal;
-        }
-      }
-    }
-  } else if (rotation == 180) {
-    // 180 ĐỘ
-    final lutSrcX = Int32List(targetRgbW);
-    for (int x = 0; x < targetRgbW; x++) {
-      lutSrcX[x] = (((targetRgbW - 1 - x) * srcW) ~/ targetRgbW).clamp(0, srcW - 1);
-    }
-    final lutSrcY = Int32List(targetRgbH);
-    for (int y = 0; y < targetRgbH; y++) {
-      lutSrcY[y] = (((targetRgbH - 1 - y) * srcH) ~/ targetRgbH).clamp(0, srcH - 1);
-    }
-
-    int outIdx = 0;
-    for (int outY = 0; outY < targetRgbH; outY++) {
-      final int srcY = lutSrcY[outY];
-      final int yRowOffset = srcY * yRowStride;
-      final int uvRowOffset = (srcY >> 1) * uvRowStride;
-
-      if (hasChroma) {
-        for (int outX = 0; outX < targetRgbW; outX++) {
-          final int srcX = lutSrcX[outX];
-          final int yIdx = yRowOffset + srcX * yPixelStride;
-          final int yVal = (yIdx < yLen) ? yPlane[yIdx] : 0;
-
-          final int uvIdx = uvRowOffset + (srcX >> 1) * uvPixelStride;
-          final int uDiff = ((uvIdx < uLen) ? uPlane![uvIdx] : 128) - 128;
-          final int vDiff = ((uvIdx < vLen) ? vPlane![uvIdx] : 128) - 128;
-
-          rgb300[outIdx++] = (yVal + ((359 * vDiff) >> 8)).clamp(0, 255);
-          rgb300[outIdx++] = (yVal - ((88 * uDiff + 183 * vDiff) >> 8)).clamp(0, 255);
-          rgb300[outIdx++] = (yVal + ((454 * uDiff) >> 8)).clamp(0, 255);
-        }
-      } else {
-        for (int outX = 0; outX < targetRgbW; outX++) {
-          final int srcX = lutSrcX[outX];
-          final int yIdx = yRowOffset + srcX * yPixelStride;
-          final int yVal = (yIdx < yLen) ? yPlane[yIdx] : 0;
-          rgb300[outIdx++] = yVal;
-          rgb300[outIdx++] = yVal;
-          rgb300[outIdx++] = yVal;
-        }
-      }
-    }
-  } else if (rotation == 270) {
-    // 270 ĐỘ
-    final lutSrcX = Int32List(targetRgbH);
-    for (int y = 0; y < targetRgbH; y++) {
-      lutSrcX[y] = (((targetRgbH - 1 - y) * srcW) ~/ targetRgbH).clamp(0, srcW - 1);
-    }
-    final lutSrcY = Int32List(targetRgbW);
-    for (int x = 0; x < targetRgbW; x++) {
-      lutSrcY[x] = ((x * srcH) ~/ targetRgbW).clamp(0, srcH - 1);
-    }
-
-    int outIdx = 0;
-    for (int outY = 0; outY < targetRgbH; outY++) {
-      final int srcX = lutSrcX[outY];
-      final int xOffset = srcX * yPixelStride;
-      final int uvXOffset = (srcX >> 1) * uvPixelStride;
-
-      if (hasChroma) {
-        for (int outX = 0; outX < targetRgbW; outX++) {
-          final int srcY = lutSrcY[outX];
-          final int yIdx = srcY * yRowStride + xOffset;
-          final int yVal = (yIdx < yLen) ? yPlane[yIdx] : 0;
-
-          final int uvIdx = (srcY >> 1) * uvRowStride + uvXOffset;
-          final int uDiff = ((uvIdx < uLen) ? uPlane![uvIdx] : 128) - 128;
-          final int vDiff = ((uvIdx < vLen) ? vPlane![uvIdx] : 128) - 128;
-
-          rgb300[outIdx++] = (yVal + ((359 * vDiff) >> 8)).clamp(0, 255);
-          rgb300[outIdx++] = (yVal - ((88 * uDiff + 183 * vDiff) >> 8)).clamp(0, 255);
-          rgb300[outIdx++] = (yVal + ((454 * uDiff) >> 8)).clamp(0, 255);
-        }
-      } else {
-        for (int outX = 0; outX < targetRgbW; outX++) {
-          final int srcY = lutSrcY[outX];
-          final int yIdx = srcY * yRowStride + xOffset;
-          final int yVal = (yIdx < yLen) ? yPlane[yIdx] : 0;
-          rgb300[outIdx++] = yVal;
-          rgb300[outIdx++] = yVal;
-          rgb300[outIdx++] = yVal;
-        }
-      }
+    for (var i = 0; i < map.lumaY.length; i++) {
+      final offset = map.lumaY[i];
+      luma[i] = (77 * input[offset + 2] + 150 * input[offset + 1] + 29 * input[offset]) >> 8;
     }
   } else {
-    // 0 ĐỘ
-    final lutSrcX = Int32List(targetRgbW);
-    for (int x = 0; x < targetRgbW; x++) {
-      lutSrcX[x] = ((x * srcW) ~/ targetRgbW).clamp(0, srcW - 1);
-    }
-    final lutSrcY = Int32List(targetRgbH);
-    for (int y = 0; y < targetRgbH; y++) {
-      lutSrcY[y] = ((y * srcH) ~/ targetRgbH).clamp(0, srcH - 1);
-    }
-
-    int outIdx = 0;
-    for (int outY = 0; outY < targetRgbH; outY++) {
-      final int srcY = lutSrcY[outY];
-      final int yRowOffset = srcY * yRowStride;
-      final int uvRowOffset = (srcY >> 1) * uvRowStride;
-
-      if (hasChroma) {
-        for (int outX = 0; outX < targetRgbW; outX++) {
-          final int srcX = lutSrcX[outX];
-          final int yIdx = yRowOffset + srcX * yPixelStride;
-          final int yVal = (yIdx < yLen) ? yPlane[yIdx] : 0;
-
-          final int uvIdx = uvRowOffset + (srcX >> 1) * uvPixelStride;
-          final int uDiff = ((uvIdx < uLen) ? uPlane![uvIdx] : 128) - 128;
-          final int vDiff = ((uvIdx < vLen) ? vPlane![uvIdx] : 128) - 128;
-
-          rgb300[outIdx++] = (yVal + ((359 * vDiff) >> 8)).clamp(0, 255);
-          rgb300[outIdx++] = (yVal - ((88 * uDiff + 183 * vDiff) >> 8)).clamp(0, 255);
-          rgb300[outIdx++] = (yVal + ((454 * uDiff) >> 8)).clamp(0, 255);
-        }
-      } else {
-        for (int outX = 0; outX < targetRgbW; outX++) {
-          final int srcX = lutSrcX[outX];
-          final int yIdx = yRowOffset + srcX * yPixelStride;
-          final int yVal = (yIdx < yLen) ? yPlane[yIdx] : 0;
-          rgb300[outIdx++] = yVal;
-          rgb300[outIdx++] = yVal;
-          rgb300[outIdx++] = yVal;
-        }
+    if (hasChroma) {
+      final u = data.uPlane!;
+      final v = data.vPlane!;
+      for (var i = 0; i < map.rgbY.length; i++) {
+        final y = input[map.rgbY[i]];
+        final ud = u[map.rgbU[i]] - 128;
+        final vd = v[map.rgbV[i]] - 128;
+        rgb[output++] = _saturate(y + ((359 * vd) >> 8));
+        rgb[output++] = _saturate(y - ((88 * ud + 183 * vd) >> 8));
+        rgb[output++] = _saturate(y + ((454 * ud) >> 8));
       }
+    } else {
+      for (var i = 0; i < map.rgbY.length; i++) {
+        final y = input[map.rgbY[i]];
+        rgb[output++] = y;
+        rgb[output++] = y;
+        rgb[output++] = y;
+      }
+    }
+    for (var i = 0; i < map.lumaY.length; i++) {
+      luma[i] = input[map.lumaY[i]];
     }
   }
-
-  // 2. CHUYỂN ĐỔI SANG LUMA 160x120 CHO GROUND PLANE ANALYZER
-  if (rotation == 90) {
-    final lutLumaX = Int32List(targetLumaH);
-    for (int y = 0; y < targetLumaH; y++) {
-      lutLumaX[y] = ((y * srcW) ~/ targetLumaH).clamp(0, srcW - 1);
-    }
-    final lutLumaY = Int32List(targetLumaW);
-    for (int x = 0; x < targetLumaW; x++) {
-      lutLumaY[x] = (((targetLumaW - 1 - x) * srcH) ~/ targetLumaW).clamp(0, srcH - 1);
-    }
-
-    int outLumaIdx = 0;
-    for (int outY = 0; outY < targetLumaH; outY++) {
-      final int srcX = lutLumaX[outY];
-      final int xOffset = srcX * yPixelStride;
-      for (int outX = 0; outX < targetLumaW; outX++) {
-        final int srcY = lutLumaY[outX];
-        final int yIdx = srcY * yRowStride + xOffset;
-        luma160[outLumaIdx++] = (yIdx < yLen) ? yPlane[yIdx] : 0;
-      }
-    }
-  } else if (rotation == 180) {
-    final lutLumaX = Int32List(targetLumaW);
-    for (int x = 0; x < targetLumaW; x++) {
-      lutLumaX[x] = (((targetLumaW - 1 - x) * srcW) ~/ targetLumaW).clamp(0, srcW - 1);
-    }
-    final lutLumaY = Int32List(targetLumaH);
-    for (int y = 0; y < targetLumaH; y++) {
-      lutLumaY[y] = (((targetLumaH - 1 - y) * srcH) ~/ targetLumaH).clamp(0, srcH - 1);
-    }
-
-    int outLumaIdx = 0;
-    for (int outY = 0; outY < targetLumaH; outY++) {
-      final int yRowOffset = lutLumaY[outY] * yRowStride;
-      for (int outX = 0; outX < targetLumaW; outX++) {
-        final int yIdx = yRowOffset + lutLumaX[outX] * yPixelStride;
-        luma160[outLumaIdx++] = (yIdx < yLen) ? yPlane[yIdx] : 0;
-      }
-    }
-  } else if (rotation == 270) {
-    final lutLumaX = Int32List(targetLumaH);
-    for (int y = 0; y < targetLumaH; y++) {
-      lutLumaX[y] = (((targetLumaH - 1 - y) * srcW) ~/ targetLumaH).clamp(0, srcW - 1);
-    }
-    final lutLumaY = Int32List(targetLumaW);
-    for (int x = 0; x < targetLumaW; x++) {
-      lutLumaY[x] = ((x * srcH) ~/ targetLumaW).clamp(0, srcH - 1);
-    }
-
-    int outLumaIdx = 0;
-    for (int outY = 0; outY < targetLumaH; outY++) {
-      final int srcX = lutLumaX[outY];
-      final int xOffset = srcX * yPixelStride;
-      for (int outX = 0; outX < targetLumaW; outX++) {
-        final int srcY = lutLumaY[outX];
-        final int yIdx = srcY * yRowStride + xOffset;
-        luma160[outLumaIdx++] = (yIdx < yLen) ? yPlane[yIdx] : 0;
-      }
-    }
-  } else {
-    // 0 ĐỘ
-    final lutLumaX = Int32List(targetLumaW);
-    for (int x = 0; x < targetLumaW; x++) {
-      lutLumaX[x] = ((x * srcW) ~/ targetLumaW).clamp(0, srcW - 1);
-    }
-    final lutLumaY = Int32List(targetLumaH);
-    for (int y = 0; y < targetLumaH; y++) {
-      lutLumaY[y] = ((y * srcH) ~/ targetLumaH).clamp(0, srcH - 1);
-    }
-
-    int outLumaIdx = 0;
-    for (int outY = 0; outY < targetLumaH; outY++) {
-      final int yRowOffset = lutLumaY[outY] * yRowStride;
-      for (int outX = 0; outX < targetLumaW; outX++) {
-        final int yIdx = yRowOffset + lutLumaX[outX] * yPixelStride;
-        luma160[outLumaIdx++] = (yIdx < yLen) ? yPlane[yIdx] : 0;
-      }
-    }
-  }
-
   stopwatch.stop();
-
-  return PreprocessedFrame(
-    rgb300: rgb300,
-    luma160: luma160,
-    preprocessDurationMs: stopwatch.elapsedMilliseconds,
-  );
+  return PreprocessedFrame(rgb300: rgb, luma160: luma, preprocessDurationMs: stopwatch.elapsedMilliseconds);
 }

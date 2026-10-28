@@ -1,18 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import '../../config/thresholds.dart';
-import '../../services/audio_haptics_service.dart';
-import '../../services/alert_decision_engine.dart';
-import '../../services/navigation_service.dart';
-import '../../services/detector_service.dart';
-import '../../services/camera_pipeline_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../services/alert_decision_engine.dart';
+import '../services/audio_haptics_service.dart';
+import '../services/camera_pipeline_service.dart';
+import '../services/detector_service.dart';
+import '../services/navigation_service.dart';
 import 'developer_hud_screen.dart';
 import 'widgets/safety_disclaimer_dialog.dart';
 
-/// accessible_screen.dart
-/// Giao diện tiếp cận chính (Accessibility First) dành cho người khiếm thị
-/// Nút bấm xúc giác khổng lồ, hỗ trợ tuyệt đối VoiceOver (iOS) & TalkBack (Android)
-/// Khóa an toàn nếu mô hình AI gặp sự cố.
-
+/// Readiness follows successful camera inference, never just a start request.
 class AccessibleScreen extends StatefulWidget {
   final AudioHapticsService audio;
   final AlertDecisionEngine alertEngine;
@@ -20,10 +19,14 @@ class AccessibleScreen extends StatefulWidget {
   final DetectorService detectorService;
   final CameraPipelineService? pipelineService;
   final bool isAppActive;
+  final bool isTransitioning;
   final VoidCallback onToggleApp;
+  final VoidCallback? onRetryModel;
+
+  static const channelsSwappedPreference = 'bemyeye_channels_swapped';
 
   const AccessibleScreen({
-    Key? key,
+    super.key,
     required this.audio,
     required this.alertEngine,
     required this.navService,
@@ -31,272 +34,335 @@ class AccessibleScreen extends StatefulWidget {
     this.pipelineService,
     required this.isAppActive,
     required this.onToggleApp,
-  }) : super(key: key);
+    this.isTransitioning = false,
+    this.onRetryModel,
+  });
 
   @override
   State<AccessibleScreen> createState() => _AccessibleScreenState();
 }
 
 class _AccessibleScreenState extends State<AccessibleScreen> {
+  static const _yellow = Color(0xFFFACC15);
+  static const _muted = Color(0xFFCACACA);
+  bool _termsAccepted = false;
+  bool _checkingEarphones = false;
+  bool _savingChannels = false;
+  String? _earphoneMessage;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      SafetyDisclaimerDialog.checkAndShow(context, widget.audio);
+    WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_prepare()));
+  }
+
+  Future<void> _prepare() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      widget.audio.isChannelsSwapped =
+          prefs.getBool(AccessibleScreen.channelsSwappedPreference) ?? false;
+    } catch (error) {
+      debugPrint('Không đọc được cài đặt tai nghe: $error');
+    }
+    if (!mounted) return;
+    final accepted =
+        await SafetyDisclaimerDialog.checkAndShow(context, widget.audio);
+    if (mounted) setState(() => _termsAccepted = accepted);
+  }
+
+  Future<void> _checkEarphones() async {
+    if (_checkingEarphones || widget.isAppActive || widget.isTransitioning) return;
+    setState(() {
+      _checkingEarphones = true;
+      _earphoneMessage = 'Đang kiểm tra tai nghe…';
     });
+    try {
+      await widget.audio.runEarphoneCheckSequence(onStepChange: (step) {
+        if (!mounted) return;
+        setState(() {
+          _earphoneMessage = switch (step) {
+            'left' => 'Âm kiểm tra: bên trái',
+            'center' => 'Âm kiểm tra: ở giữa',
+            'right' => 'Âm kiểm tra: bên phải',
+            _ => 'Đã phát xong. Nếu nghe ngược bên, bật đảo kênh rồi thử lại.',
+          };
+        });
+      });
+    } catch (error) {
+      debugPrint('Không hoàn tất kiểm tra tai nghe: $error');
+      if (mounted) {
+        setState(() {
+          _earphoneMessage =
+              'Chưa hoàn tất kiểm tra. Hãy kiểm tra âm lượng và kết nối tai nghe.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _checkingEarphones = false);
+    }
+  }
+
+  Future<void> _setChannelsSwapped(bool swapped) async {
+    setState(() => _savingChannels = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = await prefs.setBool(
+        AccessibleScreen.channelsSwappedPreference, swapped,
+      );
+      if (!saved) throw StateError('Không lưu được tùy chọn đảo kênh');
+      if (!mounted) return;
+      setState(() {
+        widget.audio.isChannelsSwapped = swapped;
+        _earphoneMessage = 'Đã lưu cài đặt. Hãy kiểm tra lại trái, giữa, phải.';
+      });
+    } catch (error) {
+      debugPrint('Không lưu được cài đặt tai nghe: $error');
+      if (mounted) {
+        setState(() => _earphoneMessage = 'Chưa lưu được cài đặt. Vui lòng thử lại.');
+      }
+    } finally {
+      if (mounted) setState(() => _savingChannels = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final hasModelError = widget.detectorService.loadError != null;
+    final loadingModel = !widget.detectorService.isReady && !hasModelError;
+    final status = widget.pipelineService?.status;
+    final failed = status == PipelineStatus.failed;
+    final running = widget.isAppActive && status == PipelineStatus.running;
+    final starting = !failed && widget.isAppActive && !running;
+    final canConfigure = _termsAccepted && !widget.isAppActive &&
+        !widget.isTransitioning && !_checkingEarphones && !_savingChannels;
+    final canToggle = _termsAccepted && !widget.isTransitioning &&
+        !_checkingEarphones && !_savingChannels &&
+        (widget.isAppActive || widget.detectorService.isReady);
+
+    final String statusTitle;
+    final String statusDescription;
+    final IconData statusIcon;
+    final Color statusColor;
+    if (hasModelError) {
+      statusTitle = 'LỖI MÔ HÌNH';
+      statusDescription = 'Không tải được bộ nhận diện. Đừng dùng ứng dụng để dẫn đường. Bạn có thể thử tải lại.';
+      statusIcon = Icons.error_outline;
+      statusColor = const Color(0xFFFCA5A5);
+    } else if (loadingModel) {
+      statusTitle = 'ĐANG TẢI NHẬN DIỆN';
+      statusDescription = 'Vui lòng chờ. Camera chưa quan sát và chưa phát cảnh báo.';
+      statusIcon = Icons.hourglass_top_rounded;
+      statusColor = _yellow;
+    } else if (failed) {
+      statusTitle = 'ĐÃ DỪNG DO LỖI CAMERA';
+      statusDescription = 'Ứng dụng không còn quan sát. Hãy dừng ở vị trí phù hợp và kiểm tra quyền camera trước khi thử lại.';
+      statusIcon = Icons.videocam_off_outlined;
+      statusColor = const Color(0xFFFCA5A5);
+    } else if (starting) {
+      statusTitle = 'ĐANG MỞ CAMERA';
+      statusDescription = 'Đang chờ khung hình nhận diện đầu tiên. Chưa có cảnh báo vật cản.';
+      statusIcon = Icons.hourglass_top_rounded;
+      statusColor = _yellow;
+    } else if (running) {
+      statusTitle = 'ĐANG QUAN SÁT';
+      statusDescription = 'Cảnh báo âm thanh và rung đang bật. Im lặng không có nghĩa là không có vật cản.';
+      statusIcon = Icons.visibility_outlined;
+      statusColor = const Color(0xFF86EFAC);
+    } else {
+      statusTitle = 'ĐÃ TẠM DỪNG';
+      statusDescription = 'Camera chưa quan sát. Chạm Bắt đầu để mở trợ lý nhận diện vật cản.';
+      statusIcon = Icons.pause_circle_outline_rounded;
+      statusColor = _muted;
+    }
+    final actionLabel = widget.isAppActive ? 'DỪNG LẠI'
+        : hasModelError ? 'KHÓA DẪN ĐƯỜNG'
+        : loadingModel ? 'ĐANG TẢI…'
+        : failed ? 'THỬ LẠI CAMERA' : 'BẮT ĐẦU';
 
     return Scaffold(
-      backgroundColor: const Color(0xFF000000), // OLED Pure Black tiết kiệm pin
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1E1E1E),
-        centerTitle: true,
-        title: const Text(
-          'Be My Eyes VN',
-          style: TextStyle(color: Color(0xFFFACC15), fontWeight: FontWeight.bold),
-        ),
-      ),
+      backgroundColor: Colors.black,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // CẢNH BÁO LỖI MÔ HÌNH HOẶC BẢN THỬ NGHIỆM
-              if (hasModelError)
-                Semantics(
-                  liveRegion: true,
-                  child: Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF7F1D1D), // Đỏ đậm cảnh báo lỗi
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFEF4444), width: 2),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.error_outline, color: Color(0xFFFACC15), size: 28),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'LỖI MÔ HÌNH: ${widget.detectorService.loadError}\nĐừng dùng ứng dụng để dẫn đường!',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              height: 1.3,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Semantics(
+                    header: true,
+                    child: Text('Be My Eye', style: TextStyle(
+                      color: _yellow, fontSize: 32, fontWeight: FontWeight.w800,
+                    )),
                   ),
-                )
-              else if (widget.pipelineService?.status == PipelineStatus.failed)
-                Semantics(
-                  liveRegion: true,
-                  child: Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF7F1D1D), // Đỏ đậm cảnh báo lỗi
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFEF4444), width: 2),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.error_outline, color: Color(0xFFEF4444), size: 28),
-                        SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'LỖI CAMERA: ĐÃ KHÓA DẪN ĐƯỜNG\nMất tín hiệu hoặc không thể khởi động camera!',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              height: 1.3,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              else if (widget.pipelineService?.status == PipelineStatus.demo)
-                Semantics(
-                  liveRegion: true,
-                  child: Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF7F1D1D), // Đỏ đậm cảnh báo
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFEF4444), width: 2),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.warning_amber_rounded, color: Color(0xFFFACC15), size: 28),
-                        SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'BẢN DEMO – CHƯA NHẬN DIỆN CAMERA\nKhông dùng để dẫn đường thực tế!',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              height: 1.3,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-              // Thanh thông báo hướng dẫn
-              Semantics(
-                liveRegion: true,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E1E1E),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: hasModelError ? const Color(0xFFEF4444) : const Color(0xFF333333),
-                    ),
-                  ),
-                  child: Text(
-                    hasModelError
-                        ? 'Không tải được mô hình nhận diện. Đừng dùng ứng dụng để dẫn đường.'
-                        : widget.isAppActive
-                            ? 'Trợ lý đang quan sát phía trước. Chạm nút to để dừng lại.'
-                            : 'Hệ thống đã sẵn sàng. Chạm nút to giữa màn hình để bắt đầu.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: hasModelError ? const Color(0xFFEF4444) : const Color(0xFFFACC15),
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-
-              // NÚT BẤM KHỔNG LỒ CHIẾM TRỌN TRUNG TÂM (KHÓA KHI CÓ LỖI)
-              Expanded(
-                child: Center(
-                  child: Semantics(
-                    button: true,
-                    enabled: widget.detectorService.isReady,
-                    label: hasModelError
-                        ? 'Chế độ dẫn đường bị khóa do lỗi tải mô hình'
-                        : widget.isAppActive
-                            ? 'Dừng dẫn đường thời gian thực'
-                            : 'Bắt đầu dẫn đường thời gian thực',
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: 220,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: hasModelError
-                              ? const Color(0xFF374151) // Xám chì khóa khi lỗi
-                              : widget.isAppActive
-                                  ? const Color(0xFFEF4444) // Đỏ khi đang bật
-                                  : const Color(0xFFFACC15), // Vàng khi đang dừng
-                          foregroundColor: hasModelError
-                              ? const Color(0xFF9CA3AF)
-                              : widget.isAppActive
-                                  ? Colors.white
-                                  : Colors.black,
-                          elevation: hasModelError ? 0 : 12,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(32),
-                            side: BorderSide(
-                              color: hasModelError ? const Color(0xFFEF4444) : Colors.white,
-                              width: 4,
-                            ),
-                          ),
-                        ),
-                        onPressed: widget.detectorService.isReady ? widget.onToggleApp : null,
-                        child: Text(
-                          hasModelError
-                              ? 'KHÓA DẪN ĐƯỜNG\n(LỖI MÔ HÌNH)'
-                              : widget.isAppActive
-                                  ? 'DỪNG LẠI'
-                                  : 'BẮT ĐẦU\nDẪN ĐƯỜNG',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.5,
-                          ),
-                        ),
+                  const SizedBox(height: 6),
+                  const Text('Trợ lý nhận diện vật cản',
+                    style: TextStyle(color: _muted, fontSize: 18)),
+                  const SizedBox(height: 24),
+                  Semantics(
+                    key: const Key('assistant-status'),
+                    liveRegion: true,
+                    label: '$statusTitle. $statusDescription',
+                    excludeSemantics: true,
+                    child: Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF171717),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: statusColor, width: 2),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(statusIcon, color: statusColor, size: 32),
+                          const SizedBox(height: 12),
+                          Text(statusTitle, style: TextStyle(color: statusColor,
+                            fontSize: 19, fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 10),
+                          Text(statusDescription, style: const TextStyle(
+                            color: Colors.white, fontSize: 17, height: 1.4)),
+                        ],
                       ),
                     ),
                   ),
-                ),
-              ),
-
-              // Các nút phụ bên dưới
-              Column(
-                children: [
+                  const SizedBox(height: 24),
                   Semantics(
                     button: true,
-                    label: 'Mở màn hình kỹ thuật và đo đạc cho nhà phát triển',
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFFA3A3A3),
-                        side: const BorderSide(color: Color(0xFF444444)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      ),
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (ctx) => DeveloperHUDScreen(
-                              audio: widget.audio,
-                              alertEngine: widget.alertEngine,
-                              navService: widget.navService,
-                              detectorService: widget.detectorService,
-                              pipelineService: widget.pipelineService,
-                            ),
+                    enabled: canToggle,
+                    excludeSemantics: true,
+                    label: actionLabel,
+                    hint: widget.isAppActive ? 'Dừng camera và cảnh báo vật cản'
+                        : 'Mở camera để nhận diện vật cản phía trước',
+                    onTap: canToggle ? widget.onToggleApp : null,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 220),
+                      child: ElevatedButton(
+                        key: const Key('primary-action'),
+                        onPressed: canToggle ? widget.onToggleApp : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: widget.isAppActive
+                              ? const Color(0xFF991B1B) : _yellow,
+                          foregroundColor: widget.isAppActive ? Colors.white : Colors.black,
+                          disabledBackgroundColor: const Color(0xFF262626),
+                          disabledForegroundColor: _muted,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            side: BorderSide(color: canToggle ? _yellow
+                                : const Color(0xFF737373), width: 4),
                           ),
-                        );
-                      },
-                      icon: const Text('🛠️'),
-                      label: const Text('Màn hình Kỹ thuật & Đo đạc'),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(widget.isAppActive ? Icons.stop_rounded
+                                : failed ? Icons.refresh_rounded : Icons.play_arrow_rounded,
+                              size: 56),
+                            const SizedBox(height: 12),
+                            Text(actionLabel, textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w900)),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  TextButton(
-                    onPressed: () {
-                      SafetyDisclaimerDialog.checkAndShow(context, widget.audio);
-                    },
-                    child: const Text(
-                      '📜 Điều khoản an toàn & Giới hạn kỹ thuật',
-                      style: TextStyle(
-                        color: Color(0xFF888888),
-                        fontSize: 13,
-                        decoration: TextDecoration.underline,
+                  if (hasModelError && widget.onRetryModel != null) ...[
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: canConfigure ? widget.onRetryModel : null,
+                      style: _secondaryButtonStyle,
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Thử tải lại nhận diện'),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  const Text('Luôn dùng gậy trắng. Giữ tai nghe được âm thanh xung quanh.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: _muted, fontSize: 16, height: 1.4)),
+                  const SizedBox(height: 28),
+                  const Semantics(header: true,
+                    child: Text('Trước khi di chuyển', style: TextStyle(
+                      color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700))),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    key: const Key('earphone-check'),
+                    onPressed: canConfigure ? _checkEarphones : null,
+                    style: _secondaryButtonStyle,
+                    icon: const Icon(Icons.headphones_outlined),
+                    label: Text(_checkingEarphones ? 'Đang kiểm tra tai nghe…'
+                        : 'Kiểm tra tai nghe trái / phải'),
+                  ),
+                  if (widget.isAppActive)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Text('Dừng trợ lý trước khi kiểm tra hoặc đổi kênh tai nghe.',
+                        style: TextStyle(color: _muted, fontSize: 16)),
+                    ),
+                  if (_earphoneMessage != null)
+                    Semantics(
+                      liveRegion: true,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Text(_earphoneMessage!, style: const TextStyle(
+                          color: _yellow, fontSize: 16, height: 1.4)),
                       ),
                     ),
+                  SwitchListTile.adaptive(
+                    key: const Key('swap-channels'),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                    title: const Text('Đảo kênh trái / phải',
+                      style: TextStyle(color: Colors.white, fontSize: 18)),
+                    subtitle: const Text('Bật nếu âm bên trái phát ở tai phải.',
+                      style: TextStyle(color: _muted, fontSize: 16)),
+                    value: widget.audio.isChannelsSwapped,
+                    onChanged: canConfigure ? _setChannelsSwapped : null,
+                    activeColor: _yellow,
+                  ),
+                  const Divider(color: Color(0xFF404040), height: 32),
+                  TextButton.icon(
+                    key: const Key('safety-terms'),
+                    onPressed: canConfigure
+                        ? () => SafetyDisclaimerDialog.checkAndShow(
+                            context, widget.audio, forceShow: true)
+                        : null,
+                    style: _secondaryButtonStyle,
+                    icon: const Icon(Icons.info_outline_rounded),
+                    label: const Text('An toàn & giới hạn nhận diện'),
+                  ),
+                  TextButton.icon(
+                    onPressed: _termsAccepted && !_checkingEarphones && !_savingChannels
+                        ? () => Navigator.of(context).push(MaterialPageRoute<void>(
+                              builder: (_) => DeveloperHUDScreen(
+                                audio: widget.audio,
+                                alertEngine: widget.alertEngine,
+                                navService: widget.navService,
+                                detectorService: widget.detectorService,
+                                pipelineService: widget.pipelineService,
+                              ),
+                            ))
+                        : null,
+                    style: _secondaryButtonStyle.copyWith(
+                        foregroundColor: const MaterialStatePropertyAll(_muted)),
+                    icon: const Icon(Icons.tune_rounded),
+                    label: const Text('Thông số kỹ thuật & đo đạc'),
                   ),
                 ],
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
+
+  ButtonStyle get _secondaryButtonStyle => OutlinedButton.styleFrom(
+    foregroundColor: _yellow,
+    disabledForegroundColor: const Color(0xFF888888),
+    minimumSize: const Size.fromHeight(64),
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+    textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+    side: const BorderSide(color: Color(0xFF737373)),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+  );
 }

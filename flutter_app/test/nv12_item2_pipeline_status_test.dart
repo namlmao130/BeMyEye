@@ -11,6 +11,34 @@ import 'package:be_my_eye_vn/services/battery_optimizer.dart';
 import 'package:be_my_eye_vn/services/csv_logger.dart';
 import 'package:be_my_eye_vn/services/image_preprocessor.dart';
 
+class _ReadyDetector extends DetectorService {
+  @override
+  bool get isReady => true;
+
+  @override
+  List<Map<String, dynamic>> detectFromImage(
+    Uint8List imageBytes,
+    int width,
+    int height,
+  ) {
+    return const [];
+  }
+}
+
+class _AlwaysFailingDetector extends DetectorService {
+  @override
+  bool get isReady => true;
+
+  @override
+  List<Map<String, dynamic>> detectFromImage(
+    Uint8List imageBytes,
+    int width,
+    int height,
+  ) {
+    throw StateError('Lỗi suy luận TFLite giả lập');
+  }
+}
+
 void main() {
   group('NV12.2 - Trạng thái PipelineStatus thực tế, Watchdog & Bỏ kPipelineEnabled', () {
     test('PipelineStatus có đủ 4 trạng thái: demo, starting, running, failed', () {
@@ -70,11 +98,7 @@ void main() {
       expect(spokenTexts, isEmpty, reason: 'Chưa running thì chưa được phát "Đã bật trợ lý dẫn đường"');
 
       // 2. Khi detector ĐÃ sẵn sàng (isReady == true)
-      final detectorReady = DetectorService(
-        stringLoader: (_) async => List.generate(91, (i) => 'person').join('\n'),
-        interpreterCreator: (_, {options}) => Future.error(Exception('mock')),
-      );
-      await detectorReady.loadModel();
+      final detectorReady = _ReadyDetector();
       expect(detectorReady.isReady, isTrue);
 
       final pipeline2 = CameraPipelineService(
@@ -101,11 +125,7 @@ void main() {
         spokenTexts.add(t);
       });
 
-      final detector = DetectorService(
-        stringLoader: (_) async => List.generate(91, (i) => 'person').join('\n'),
-        interpreterCreator: (_, {options}) => Future.error(Exception('mock')),
-      );
-      await detector.loadModel();
+      final detector = _ReadyDetector();
 
       final pipeline = CameraPipelineService(
         detectorService: detector,
@@ -157,11 +177,7 @@ void main() {
         spokenTexts.add(t);
       });
 
-      final detector = DetectorService(
-        stringLoader: (_) async => List.generate(91, (i) => 'person').join('\n'),
-        interpreterCreator: (_, {options}) => Future.error(Exception('mock')),
-      );
-      await detector.loadModel();
+      final detector = _AlwaysFailingDetector();
 
       final pipeline = CameraPipelineService(
         detectorService: detector,
@@ -172,24 +188,37 @@ void main() {
         csvLogger: CsvLogger(),
       );
 
-      // Chuyển sang running
-      pipeline.updateStatus(PipelineStatus.running);
-      spokenTexts.clear();
+      final dummyFrame = CameraFrameData(
+        yPlane: Uint8List(160 * 120),
+        yRowStride: 160,
+        yPixelStride: 1,
+        width: 160,
+        height: 120,
+        sensorOrientation: 90,
+      );
 
-      // Giả lập 5 lần lỗi suy luận liên tiếp
+      // Chạy qua pipeline thật để xác minh exception từ detector được đếm.
       for (int i = 1; i <= kMaxConsecutiveInferenceErrors; i++) {
+        await pipeline.processSyntheticFrame(dummyFrame, customNow: i * 1000);
+        expect(pipeline.consecutiveInferenceErrors, equals(i));
+
         if (i < kMaxConsecutiveInferenceErrors) {
           expect(pipeline.status, equals(PipelineStatus.running));
         } else {
-          pipeline.updateStatus(
-            PipelineStatus.failed,
-            reason: 'Quá 5 lần suy luận lỗi',
-          );
+          expect(pipeline.status, equals(PipelineStatus.failed));
         }
       }
 
       expect(pipeline.status, equals(PipelineStatus.failed));
       expect(spokenTexts, contains('Mất tín hiệu camera, đừng dùng để dẫn đường'));
+
+      // Frame đến muộn không được tự đổi failed trở lại running.
+      await pipeline.processSyntheticFrame(dummyFrame, customNow: 9999);
+      expect(pipeline.status, equals(PipelineStatus.failed));
+      expect(
+        pipeline.consecutiveInferenceErrors,
+        equals(kMaxConsecutiveInferenceErrors),
+      );
 
       pipeline.dispose();
       audio.dispose();

@@ -1,4 +1,6 @@
 import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../config/thresholds.dart';
 
@@ -55,7 +57,8 @@ class DeviceHealthService {
           _thermalStatus = rawThermal;
         }
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Không thể đọc trạng thái pin/nhiệt độ thiết bị: $e');
       // Giữ nguyên giá trị hiện tại khi chạy trên môi trường test hoặc thiết bị không hỗ trợ
     }
   }

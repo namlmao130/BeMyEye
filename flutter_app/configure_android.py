@@ -1,292 +1,119 @@
 #!/usr/bin/env python3
-import os
-import re
+"""Validate native configuration; bootstrap missing Android template files only.
 
-PROGUARD_RULES = """# Suppress all missing class warnings from R8 / ProGuard
--ignorewarnings
--dontwarn **
-
-# Google Play Core & Play Store Split / Deferred Components
--dontwarn com.google.android.play.**
--dontwarn com.google.android.play.core.**
--keep class com.google.android.play.core.splitcompat.** { *; }
--keep class com.google.android.play.core.splitinstall.** { *; }
-
-# TensorFlow Lite & tflite_flutter specific rules
--keep class org.tensorflow.lite.** { *; }
--keep class com.google.android.gms.tflite.** { *; }
--dontwarn org.tensorflow.lite.**
-
-# Keep native methods and standard FFI/reflection structures
--keepclassmembers class * {
-    native <methods>;
-}
-
-# General Flutter embedding rules
--keep class io.flutter.app.** { *; }
--keep class io.flutter.plugin.** { *; }
--keep class io.flutter.util.** { *; }
--keep class io.flutter.view.** { *; }
--keep class io.flutter.embedding.** { *; }
--keep class io.flutter.plugin.common.** { *; }
--keep class io.flutter.plugins.** { *; }
+Never regenerate native source, rewrite Gradle files, or modify the pub cache.
+The pinned Flutter SDK supplies launcher resources and the Gradle wrapper in a
+temporary project. Existing files are always retained.
 """
 
-def configure():
-    print(">>> [configure_android.py] Configuring Android files for Be My Eyes VN...")
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    android_dir = os.path.join(base_dir, "android")
-    
-    # 1. Update android/app/build.gradle
-    build_gradle_path = os.path.join(android_dir, "app", "build.gradle")
-    if os.path.exists(build_gradle_path):
-        with open(build_gradle_path, "r", encoding="utf-8") as f:
-            content = f.read()
+import argparse
+import json
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+import xml.etree.ElementTree as ET
 
-        # Set compileSdk / targetSdk to 36 (Mandatory for flutter_tts & audioplayers)
-        content = re.sub(r'compileSdk\s*=\s*\S+', 'compileSdk = 36', content)
-        content = re.sub(r'compileSdkVersion\s*\S+', 'compileSdkVersion 36', content)
-        content = re.sub(r'targetSdk\s*=\s*\S+', 'targetSdk = 36', content)
-        content = re.sub(r'targetSdkVersion\s*\S+', 'targetSdkVersion 36', content)
+FLUTTER_VERSION = "3.47.8"
+APP_ID = "com.bemyeye.bemyeye_vn"
+ACTIVITY = Path("app/src/main/kotlin/com/bemyeye/bemyeye_vn/MainActivity.kt")
+ANDROID_NS = "{http://schemas.android.com/apk/res/android}"
+SOUNDS = (
+    "beep", "beep_left", "beep_center", "beep_right", "step_down",
+    "beep_low", "beep_high",
+)
 
-        # Set minSdk / minSdkVersion to 26 (Mandatory for tflite_flutter & modern Android)
-        content = re.sub(r'minSdk\s*=\s*\S+', 'minSdk = 26', content)
-        content = re.sub(r'minSdkVersion\s*\S+', 'minSdkVersion 26', content)
 
-        # Force Java 17 and Kotlin JVM Target 17
-        content = content.replace("JavaVersion.VERSION_1_8", "JavaVersion.VERSION_17")
-        content = content.replace("jvmTarget = '1.8'", "jvmTarget = '17'")
-        content = content.replace('jvmTarget = "1.8"', 'jvmTarget = "17"')
+def validate_project(project: Path) -> None:
+    android = project / "android"
+    activity = (android / ACTIVITY).read_text(encoding="utf-8")
+    if f"package {APP_ID}" not in activity or '"com.bemyeye/device_health"' not in activity:
+        raise RuntimeError("MainActivity package/device health channel is missing")
+    manifest = ET.parse(android / "app/src/main/AndroidManifest.xml").getroot()
+    activity_node = manifest.find("application/activity")
+    if activity_node is None or activity_node.get(ANDROID_NS + "name") != ".MainActivity":
+        raise RuntimeError("Manifest does not resolve the custom MainActivity")
+    gradle = (android / "app/build.gradle").read_text(encoding="utf-8")
+    if f'namespace "{APP_ID}"' not in gradle or f'applicationId "{APP_ID}"' not in gradle:
+        raise RuntimeError("Android namespace/applicationId must match MainActivity")
 
-        # Ensure aaptOptions noCompress for .tflite
-        if "aaptOptions" not in content and "noCompress" not in content:
-            aapt_block = """
-    aaptOptions {
-        noCompress 'tflite'
-        noCompress 'lite'
-    }
-"""
-            if "buildTypes {" in content:
-                content = content.replace("buildTypes {", aapt_block + "\n    buildTypes {", 1)
-            else:
-                content = content.replace("android {", "android {\n" + aapt_block, 1)
+    model = project / "assets/models/mobilenet_ssd.tflite"
+    with model.open("rb") as stream:
+        if stream.read(8)[4:8] != b"TFL3":
+            raise RuntimeError("Model is missing a TensorFlow Lite FlatBuffer header")
+    labels = (project / "assets/models/labelmap.txt").read_text(encoding="utf-8").splitlines()
+    if len(labels) != 91 or labels[1] != "person" or labels[6] != "bus":
+        raise RuntimeError("COCO label map no longer matches the bundled SSD model")
+    for sound in SOUNDS:
+        with (project / f"assets/sounds/{sound}.wav").open("rb") as stream:
+            header = stream.read(12)
+        if header[:4] != b"RIFF" or header[8:12] != b"WAVE":
+            raise RuntimeError(f"Invalid WAV asset: {sound}")
 
-        # Configure release build to use debug signing and link proguard-rules.pro
-        release_block = """    buildTypes {
-        release {
-            signingConfig signingConfigs.debug
-            minifyEnabled false
-            shrinkResources false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-        }
-    }"""
-        if "buildTypes {" in content:
-            content = re.sub(r'buildTypes\s*\{.*?\n    \}', release_block, content, flags=re.DOTALL)
-            if "proguardFiles" not in content:
-                content = content.replace("buildTypes {", release_block + "\n    /* original: buildTypes */", 1)
 
-        with open(build_gradle_path, "w", encoding="utf-8") as f:
-            f.write(content)
-        print("  ✓ Updated android/app/build.gradle (compileSdk=36, targetSdk=36, minSdk=26, Java/Kotlin=17, aaptOptions, proguardFiles)")
+def copy_missing_platform_files(source: Path, destination: Path) -> None:
+    # Explicit allowlist: native Kotlin, manifests, Gradle files and signing
+    # settings are owned by this repository, never by `flutter create`.
+    files = [
+        source / "gradlew", source / "gradlew.bat",
+        source / "gradle/wrapper/gradle-wrapper.jar",
+    ]
+    files.extend((source / "app/src/main/res").rglob("*"))
+    for file in files:
+        if not file.is_file():
+            continue
+        target = destination / file.relative_to(source)
+        if target.exists():
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(file, target)
+        print(f"Added missing Android file: {target.relative_to(destination)}")
+
+
+def bootstrap(project: Path, flutter: str) -> None:
+    validate_project(project)
+    result = subprocess.run(
+        [flutter, "--version", "--machine"], check=True,
+        capture_output=True, text=True,
+    )
+    version = json.loads(result.stdout)["frameworkVersion"]
+    if version != FLUTTER_VERSION:
+        raise RuntimeError(f"Use Flutter {FLUTTER_VERSION}; found {version}")
+
+    # tempfile owns only its newly created directory; no checkout is deleted.
+    with tempfile.TemporaryDirectory(prefix="bemyeye_android_") as temporary:
+        scaffold = Path(temporary) / "scaffold"
+        subprocess.run([
+            flutter, "create", "--no-pub", "--platforms=android",
+            "--org", "com.bemyeye", "--project-name", "bemyeye_vn",
+            str(scaffold),
+        ], check=True)
+        copy_missing_platform_files(scaffold / "android", project / "android")
+
+    required = (
+        "gradlew", "gradlew.bat", "gradle/wrapper/gradle-wrapper.jar",
+        "gradle/wrapper/gradle-wrapper.properties",
+        "app/src/main/res/values/styles.xml",
+        "app/src/main/res/mipmap-hdpi/ic_launcher.png",
+    )
+    for file in required:
+        if not (project / "android" / file).is_file():
+            raise RuntimeError(f"Missing Android bootstrap file: {file}")
+    validate_project(project)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--check", action="store_true", help="Validate source/assets without SDK or writes")
+    parser.add_argument("--flutter", default="flutter", help="Flutter executable (or flutter.bat on Windows)")
+    args = parser.parse_args()
+    project = Path(__file__).resolve().parent
+    if args.check:
+        validate_project(project)
     else:
-        print("  ! android/app/build.gradle not found!")
+        bootstrap(project, args.flutter)
+    print("Android source and bundled assets validated.")
 
-    # 2. Update root android/build.gradle to force Java 17, compileSdkVersion 36, and disable AarMetadata checks
-    root_gradle_path = os.path.join(android_dir, "build.gradle")
-    if os.path.exists(root_gradle_path):
-        with open(root_gradle_path, "r", encoding="utf-8") as f:
-            root_content = f.read()
-
-        subprojects_block = """
-// Disable checkAarMetadata tasks that fail when third-party plugins use older compileSdk
-allprojects {
-    tasks.matching { it.name.contains("AarMetadata") }.configureEach {
-        enabled = false
-    }
-}
-
-subprojects {
-    tasks.matching { it.name.contains("AarMetadata") }.configureEach {
-        enabled = false
-    }
-}
-
-// Force Java 17 and compileSdkVersion 36 across all plugins and subprojects
-subprojects {
-    afterEvaluate { project ->
-        if (project.hasProperty('android')) {
-            project.android {
-                compileSdkVersion 36
-                compileOptions {
-                    sourceCompatibility JavaVersion.VERSION_17
-                    targetCompatibility JavaVersion.VERSION_17
-                }
-            }
-        }
-        tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-            kotlinOptions {
-                jvmTarget = '17'
-            }
-        }
-    }
-}
-"""
-        if "AarMetadata" not in root_content:
-            root_content += "\n" + subprojects_block
-            with open(root_gradle_path, "w", encoding="utf-8") as f:
-                f.write(root_content)
-            print("  ✓ Updated android/build.gradle (enforced Java 17, compileSdk 36, disabled AarMetadata)")
-    else:
-        print("  ! android/build.gradle not found!")
-
-    # 3. Write proguard-rules.pro
-    proguard_path = os.path.join(android_dir, "app", "proguard-rules.pro")
-    with open(proguard_path, "w", encoding="utf-8") as f:
-        f.write(PROGUARD_RULES)
-    print("  ✓ Created android/app/proguard-rules.pro")
-
-    # 4. Update AndroidManifest.xml
-    manifest_path = os.path.join(android_dir, "app", "src", "main", "AndroidManifest.xml")
-    manifest_content = """<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
-    <!-- Quyền thiết yếu cho thị giác máy tính và dẫn đường on-device (NV10) -->
-    <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-
-    <uses-feature android:name="android.hardware.camera" android:required="true" />
-    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
-    <uses-feature android:name="android.hardware.sensor.compass" android:required="false" />
-    <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" />
-
-    <application
-        android:label="Be My Eyes VN"
-        android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:launchMode="singleTop"
-            android:theme="@style/LaunchTheme"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
-            android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize">
-            <meta-data
-              android:name="io.flutter.embedding.android.NormalTheme"
-              android:resource="@style/NormalTheme"
-              />
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
-            </intent-filter>
-        </activity>
-        <meta-data
-            android:name="flutterEmbedding"
-            android:value="2" />
-    </application>
-</manifest>
-"""
-    with open(manifest_path, "w", encoding="utf-8") as f:
-        f.write(manifest_content)
-    print("  ✓ Wrote AndroidManifest.xml with NV10 permissions and hardware features")
-
-    # 4b. Update MainActivity.kt with Platform Channel (NV9)
-    main_activity_dir = os.path.join(android_dir, "app", "src", "main", "kotlin", "com", "bemyeye", "bemyeye_vn")
-    os.makedirs(main_activity_dir, exist_ok=True)
-    main_activity_path = os.path.join(main_activity_dir, "MainActivity.kt")
-    main_activity_content = """package com.bemyeye.bemyeye_vn
-
-import android.content.Context
-import android.os.BatteryManager
-import android.os.Build
-import android.os.PowerManager
-import androidx.annotation.NonNull
-import io.flutter.embedding.android.FlutterActivity
-import io.flutter.embedding.engine.FlutterEngine
-import io.flutter.plugin.common.MethodChannel
-
-class MainActivity: FlutterActivity() {
-    private val CHANNEL = "com.bemyeye/device_health"
-
-    override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
-        super.configureFlutterEngine(flutterEngine)
-
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
-            when (call.method) {
-                "getDeviceHealth" -> {
-                    val healthData = getDeviceHealth()
-                    result.success(healthData)
-                }
-                "getBatteryLevel" -> {
-                    result.success(getBatteryLevel())
-                }
-                "getThermalStatus" -> {
-                    result.success(getThermalStatus())
-                }
-                else -> result.notImplemented()
-            }
-        }
-    }
-
-    private fun getBatteryLevel(): Int {
-        return try {
-            val bm = getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
-            bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
-        } catch (e: Exception) {
-            -1
-        }
-    }
-
-    private fun getThermalStatus(): Int {
-        return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
-                pm?.currentThermalStatus ?: 0
-            } else {
-                0
-            }
-        } catch (e: Exception) {
-            0
-        }
-    }
-
-    private fun getDeviceHealth(): Map<String, Any> {
-        val battery = getBatteryLevel()
-        val thermal = getThermalStatus()
-        val isThrottling = thermal >= 3 // 3 = THERMAL_STATUS_SEVERE
-        return mapOf(
-            "batteryLevel" to battery,
-            "thermalStatus" to thermal,
-            "isThermalThrottling" to isThrottling
-        )
-    }
-}
-"""
-    with open(main_activity_path, "w", encoding="utf-8") as f:
-        f.write(main_activity_content)
-    print("  ✓ Wrote MainActivity.kt with device health platform channel (NV9)")
-
-    # 5. Update gradle.properties
-    props_path = os.path.join(android_dir, "gradle.properties")
-    props_content = ""
-    if os.path.exists(props_path):
-        with open(props_path, "r", encoding="utf-8") as f:
-            props_content = f.read()
-    if "enforceCompileSdk" not in props_content:
-        with open(props_path, "a", encoding="utf-8") as f:
-            f.write("\norg.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=2G\nandroid.useAndroidX=true\nandroid.enableJetifier=true\nkotlin.jvm.target.validation.mode=warning\nandroid.suppressUnsupportedCompileSdk=36\nandroid.uniquePackageNames=false\nandroid.dependency.enforceCompileSdk=false\n")
-        print("  ✓ Updated android/gradle.properties (enforceCompileSdk=false, uniquePackageNames=false)")
-    else:
-        print("  ✓ android/gradle.properties already configured")
-
-    print(">>> [configure_android.py] Android configuration complete!")
 
 if __name__ == "__main__":
-    configure()
+    main()

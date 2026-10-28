@@ -3,9 +3,6 @@ allprojects {
         google()
         mavenCentral()
     }
-    tasks.matching { it.name.contains("AarMetadata") }.configureEach {
-        enabled = false
-    }
 }
 
 rootProject.buildDir = "../build"
@@ -18,30 +15,4 @@ subprojects {
 
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
-}
-
-subprojects {
-    tasks.matching { it.name.contains("AarMetadata") }.configureEach {
-        enabled = false
-    }
-}
-
-// Force Java 17 and compileSdkVersion 36 across all plugins and subprojects
-subprojects {
-    afterEvaluate { project ->
-        if (project.hasProperty('android')) {
-            project.android {
-                compileSdkVersion 36
-                compileOptions {
-                    sourceCompatibility JavaVersion.VERSION_17
-                    targetCompatibility JavaVersion.VERSION_17
-                }
-            }
-        }
-        tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-            kotlinOptions {
-                jvmTarget = '17'
-            }
-        }
-    }
 }

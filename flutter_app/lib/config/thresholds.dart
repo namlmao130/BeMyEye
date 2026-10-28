@@ -11,6 +11,9 @@
 /// Nếu quá 1.5 giây (1500ms) không có khung mới, pipeline chuyển sang trạng thái failed.
 const int kWatchdogFrameTimeoutMs = 1500;
 
+/// Giới hạn khởi động (quyền, camera và kết quả nhận diện đầu tiên), mili-giây.
+const int kPipelineStartupTimeoutMs = 12000;
+
 /// Số lần suy luận lỗi liên tiếp tối đa trước khi Watchdog ngắt pipeline
 const int kMaxConsecutiveInferenceErrors = 5;
 
@@ -225,7 +228,14 @@ int kGpsInstructionCooldownMs = 6000;
 int kGpsSpeechPriority = 50;
 
 /// Địa chỉ API định tuyến đi bộ OpenStreetMap / OSRM Foot Profile
-String kOsrmFootApiBase = 'https://router.project-osrm.org/route/v1/foot';
+// Must point to an HTTPS OSRM deployment built using foot.lua, not a car profile.
+String kOsrmFootApiBase = const String.fromEnvironment('OSRM_FOOT_API_BASE');
+
+const double kGpsMaxAccuracyMeters = 20.0;
+const int kGpsMaxFixAgeMs = 10000;
+const int kSpeechInterruptPriorityDelta = 40;
+const int kSpeechInterruptMinDelayMs = 800;
+const int kSpeechHistoryLimit = 100;
 
 /// Thời gian chờ mạng tối đa khi truy vấn OSRM
 /// Đơn vị: Mili-giây (ms). Quá 7 giây sẽ chuyển sang lộ trình dự phòng/ngoại tuyến.

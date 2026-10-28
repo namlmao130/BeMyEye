@@ -42,13 +42,13 @@ class AlertCandidate {
 class AlertDecisionEngine {
   final AudioHapticsService audio;
 
-  int _lastBeepTime = 0;
+  int? _lastBeepTime;
   int _lastAlertActivityTime = 0;
   int _lastHeartbeatTime = 0;
 
   // Quản lý trạng thái giọng nói chống lặp và chống cắt ngang
   final Map<String, int> _threatSpeechTimeMap = {};
-  int _lastAnySpeechTime = 0;
+  int? _lastAnySpeechTime;
   int _lastSpokenPriority = 0;
 
   AlertCandidate? currentThreat;
@@ -153,7 +153,7 @@ class AlertDecisionEngine {
     }
 
     // Bíp và Rung phát liên tục theo chu kỳ để giữ cảm nhận không gian
-    if (now - _lastBeepTime >= requiredBeepInterval) {
+    if (_lastBeepTime == null || now - _lastBeepTime! >= requiredBeepInterval) {
       _playBeepAndHaptic(primary);
       _lastBeepTime = now;
       _lastAlertActivityTime = now;
@@ -320,9 +320,9 @@ class AlertDecisionEngine {
 
     if (text == null) return;
 
-    final int lastSpoken = _threatSpeechTimeMap[speechKey] ?? 0;
-    final int elapsedThisThreat = now - lastSpoken;
-    final int elapsedAnySpeech = now - _lastAnySpeechTime;
+    final lastSpoken = _threatSpeechTimeMap[speechKey];
+    final int elapsedThisThreat = lastSpoken == null ? kSpeechCooldownMs : now - lastSpoken;
+    final int elapsedAnySpeech = _lastAnySpeechTime == null ? kSpeechCooldownMs : now - _lastAnySpeechTime!;
 
     // Điều kiện phát giọng nói:
     // 1. Mối đe dọa này chưa được nói trong vòng kSpeechCooldownMs (tối thiểu 3 giây)
@@ -330,7 +330,8 @@ class AlertDecisionEngine {
     //    TRỪ KHI câu mới có mức ưu tiên cao hơn hẳn (chênh lệch >= 40 điểm) và câu cũ đã nói ít nhất 800ms
     final bool canSpeakThis = elapsedThisThreat >= kSpeechCooldownMs;
     final bool isHigherPriorityInterrupt =
-        (speechPriority >= _lastSpokenPriority + 40) && (elapsedAnySpeech >= 800);
+        (speechPriority >= _lastSpokenPriority + kSpeechInterruptPriorityDelta) &&
+        (elapsedAnySpeech >= kSpeechInterruptMinDelayMs);
 
     if (canSpeakThis && (elapsedAnySpeech >= kSpeechCooldownMs || isHigherPriorityInterrupt)) {
       _threatSpeechTimeMap[speechKey] = now;
@@ -339,7 +340,7 @@ class AlertDecisionEngine {
 
       audio.speakVietnamese(
         text,
-        force: isHigherPriorityInterrupt,
+        force: true,
         priority: speechPriority,
         customNow: now,
       );
@@ -352,10 +353,10 @@ class AlertDecisionEngine {
   }
 
   void reset() {
-    _lastBeepTime = 0;
+    _lastBeepTime = null;
     _lastAlertActivityTime = 0;
     _lastHeartbeatTime = 0;
-    _lastAnySpeechTime = 0;
+    _lastAnySpeechTime = null;
     _lastSpokenPriority = 0;
     _threatSpeechTimeMap.clear();
     currentThreat = null;

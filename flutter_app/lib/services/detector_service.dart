@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 import '../config/thresholds.dart';
@@ -160,7 +162,8 @@ class DetectorService {
           ..useNnApiForAndroid = true;
         interpreter = await _interpreterCreator(modelPath, options: nnapiOptions);
         selectedDelegate = 'NNAPI';
-      } catch (_) {
+      } catch (e) {
+        debugPrint('NNAPI không khả dụng, thử delegate tiếp theo: $e');
         interpreter = null;
       }
 
@@ -172,10 +175,12 @@ class DetectorService {
             gpuOptions.addDelegate(GpuDelegateV2());
             interpreter = await _interpreterCreator(modelPath, options: gpuOptions);
             selectedDelegate = 'GPU';
-          } catch (_) {
+          } catch (e) {
+            debugPrint('GPU delegate Android không khả dụng: $e');
             interpreter = null;
           }
-        } catch (_) {
+        } catch (e) {
+          debugPrint('Không thể cấu hình GPU delegate Android: $e');
           interpreter = null;
         }
       }
@@ -187,7 +192,8 @@ class DetectorService {
           xnnOptions.addDelegate(XNNPackDelegate());
           interpreter = await _interpreterCreator(modelPath, options: xnnOptions);
           selectedDelegate = 'XNNPACK';
-        } catch (_) {
+        } catch (e) {
+          debugPrint('XNNPack không khả dụng, chuyển sang CPU: $e');
           interpreter = null;
         }
       }
@@ -198,13 +204,15 @@ class DetectorService {
           ..useMetalDelegateForIOS = true;
         interpreter = await _interpreterCreator(modelPath, options: iosOptions);
         selectedDelegate = 'METAL';
-      } catch (_) {
+      } catch (e) {
+        debugPrint('Metal delegate iOS không khả dụng: $e');
         try {
           final gpuOptions = InterpreterOptions()..threads = 2;
           gpuOptions.addDelegate(GpuDelegate());
           interpreter = await _interpreterCreator(modelPath, options: gpuOptions);
           selectedDelegate = 'GPU';
-        } catch (_) {
+        } catch (fallbackError) {
+          debugPrint('GPU delegate iOS không khả dụng: $fallbackError');
           interpreter = null;
         }
       }
@@ -316,20 +324,18 @@ class DetectorService {
       return [];
     }
 
-    try {
-      _interpreter!.runForMultipleInputs([imageBytes], _outputs);
+    // Không nuốt lỗi suy luận tại đây. CameraPipelineService phải nhận được
+    // exception để tăng bộ đếm lỗi liên tiếp và khóa dẫn đường khi đạt ngưỡng.
+    _interpreter!.runForMultipleInputs([imageBytes], _outputs);
 
-      return parsePredictions(
-        rawBoxes: _outputBoxes[0],
-        rawClasses: _outputClasses[0],
-        rawScores: _outputScores[0],
-        count: _numDetections[0].toInt(),
-        imageWidth: width,
-        imageHeight: height,
-      );
-    } catch (e) {
-      return [];
-    }
+    return parsePredictions(
+      rawBoxes: _outputBoxes[0],
+      rawClasses: _outputClasses[0],
+      rawScores: _outputScores[0],
+      count: _numDetections[0].toInt(),
+      imageWidth: width,
+      imageHeight: height,
+    );
   }
 
   void dispose() {

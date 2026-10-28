@@ -1,7 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-import 'config/thresholds.dart';
 import 'services/audio_haptics_service.dart';
 import 'services/alert_decision_engine.dart';
 import 'services/navigation_service.dart';
@@ -33,7 +34,7 @@ class BeMyEyeApp extends StatefulWidget {
   State<BeMyEyeApp> createState() => _BeMyEyeAppState();
 }
 
-class _BeMyEyeAppState extends State<BeMyEyeApp> {
+class _BeMyEyeAppState extends State<BeMyEyeApp> with WidgetsBindingObserver {
   late final AudioHapticsService _audioService;
   late final AlertDecisionEngine _alertEngine;
   late final NavigationService _navService;
@@ -47,13 +48,20 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
   late final CameraPipelineService _cameraPipeline;
 
   bool _isAppActive = false;
+  bool _isTransitioning = false;
+  bool _isDisposed = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _audioService = AudioHapticsService();
     _alertEngine = AlertDecisionEngine(audio: _audioService);
-    _navService = NavigationService(audio: _audioService, alertEngine: _alertEngine);
+    _navService = NavigationService(
+      audio: _audioService,
+      alertEngine: _alertEngine,
+      isVisionReady: () => _cameraPipeline.status == PipelineStatus.running,
+    );
     _spatialAnalyzer = SpatialAnalyzer();
     _groundAnalyzer = GroundPlaneAnalyzer();
     _detectorService = DetectorService();
@@ -72,13 +80,33 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
       tiltService: _tiltService,
       healthService: _healthService,
     );
+    _cameraPipeline.onStatusChanged = _handlePipelineStatusChanged;
 
     _initDetector();
   }
 
+  void _handlePipelineStatusChanged() {
+    if (!mounted || _isDisposed) return;
+    final failed = _cameraPipeline.status == PipelineStatus.failed;
+    setState(() {
+      _isAppActive = _cameraPipeline.status == PipelineStatus.running;
+    });
+
+    if (failed) {
+      if (_navService.getStatus().isNavigating) {
+        _navService.stopNavigation(announce: false);
+      }
+      unawaited(
+        WakelockPlus.disable().catchError((Object e) {
+          debugPrint('Không thể tắt wakelock sau lỗi pipeline: $e');
+        }),
+      );
+    }
+  }
+
   Future<void> _initDetector() async {
     await _detectorService.loadModel();
-    if (mounted) {
+    if (mounted && !_isDisposed) {
       setState(() {});
       if (!_detectorService.isReady) {
         // Nguyên tắc an toàn: Lỗi phải kêu to, không âm thầm bỏ qua
@@ -90,7 +118,18 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
     }
   }
 
-  void _toggleApp() async {
+  Future<void> _retryModel() async {
+    if (_isTransitioning || _isDisposed) return;
+    setState(() => _isTransitioning = true);
+    try {
+      await _initDetector();
+    } finally {
+      if (mounted && !_isDisposed) setState(() => _isTransitioning = false);
+    }
+  }
+
+  Future<void> _toggleApp() async {
+    if (_isTransitioning || _isDisposed) return;
     // Nếu mô hình chưa sẵn sàng hoặc có lỗi, khóa hoàn toàn chức năng dẫn đường
     if (!_detectorService.isReady) {
       _audioService.speakVietnamese(
@@ -100,15 +139,16 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
       return;
     }
 
-    setState(() {
-      _isAppActive = !_isAppActive;
-    });
-
-    if (_isAppActive) {
+    setState(() => _isTransitioning = true);
+    try {
+    if (_cameraPipeline.status != PipelineStatus.running &&
+        _cameraPipeline.status != PipelineStatus.starting) {
       // Giữ màn hình luôn sáng bằng WakelockPlus khi dẫn đường
       try {
         await WakelockPlus.enable();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Không thể bật wakelock: $e');
+      }
 
       // Kích hoạt luồng camera stream (chỉ nói "Đã bật trợ lý" khi thực sự running từ Pipeline)
       await _cameraPipeline.startStream();
@@ -117,25 +157,66 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
       await _cameraPipeline.stopStream();
       try {
         await WakelockPlus.disable();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Không thể tắt wakelock: $e');
+      }
 
       _audioService.speakVietnamese('Đã tạm dừng', force: true);
       _navService.stopNavigation();
+    }
+    } finally {
+      if (mounted && !_isDisposed) setState(() => _isTransitioning = false);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      unawaited(_pauseForBackground());
+    }
+  }
+
+  Future<void> _pauseForBackground() async {
+    final wasActive = _isAppActive || _isTransitioning;
+    await _cameraPipeline.stopStream();
+    _navService.stopNavigation(announce: false);
+    try {
+      await WakelockPlus.disable();
+    } catch (e) {
+      debugPrint('Không thể tắt wakelock khi ứng dụng vào nền: $e');
+    }
+    if (wasActive && !_isDisposed) {
+      await _audioService.speakVietnamese(
+        'Đã tạm dừng khi rời ứng dụng. Mở lại và bấm bắt đầu để tiếp tục.',
+        force: true,
+        priority: 300,
+      );
     }
   }
 
   @override
   void dispose() {
+    _isDisposed = true;
+    WidgetsBinding.instance.removeObserver(this);
+    _cameraPipeline.onStatusChanged = null;
     _healthService.dispose();
-    _cameraPipeline.dispose();
     _tiltService.dispose();
-    try {
-      WakelockPlus.disable();
-    } catch (_) {}
-    _audioService.dispose();
+    unawaited(
+      WakelockPlus.disable().catchError((Object e) {
+        debugPrint('Không thể giải phóng wakelock: $e');
+      }),
+    );
     _navService.dispose();
-    _detectorService.dispose();
+    unawaited(_disposePipeline());
     super.dispose();
+  }
+
+  Future<void> _disposePipeline() async {
+    await _cameraPipeline.dispose();
+    _detectorService.dispose();
+    _audioService.dispose();
   }
 
   @override
@@ -162,6 +243,8 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> {
           pipelineService: _cameraPipeline,
           isAppActive: _isAppActive,
           onToggleApp: _toggleApp,
+          onRetryModel: _retryModel,
+          isTransitioning: _isTransitioning,
         ),
       ),
     );
