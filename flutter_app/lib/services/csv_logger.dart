@@ -1,5 +1,6 @@
 import 'dart:collection';
 import 'dart:math';
+
 import '../config/thresholds.dart';
 
 /// csv_logger.dart
@@ -79,12 +80,15 @@ class CsvLogger {
 
   int get rowCount => _entries.length;
   List<CsvLogEntry> get entries => _entries.toList(growable: false);
-  List<CsvLogEntry> get benchmarkEntries => List.unmodifiable(_benchmarkEntries);
+  List<CsvLogEntry> get benchmarkEntries =>
+      List.unmodifiable(_benchmarkEntries);
 
   int get benchmarkElapsedSeconds {
     if (!isBenchmarkRunning || benchmarkStartTimeMs == 0) return 0;
     final now = DateTime.now().millisecondsSinceEpoch;
-    return ((now - benchmarkStartTimeMs) / 1000).clamp(0, benchmarkDurationSeconds).toInt();
+    return ((now - benchmarkStartTimeMs) / 1000)
+        .clamp(0, benchmarkDurationSeconds)
+        .toInt();
   }
 
   int get benchmarkRemainingSeconds {
@@ -166,8 +170,11 @@ class CsvLogger {
   }
 
   /// Tính toán số liệu thống kê trung thực từ dữ liệu Benchmark
-  Map<String, dynamic> computeBenchmarkStats([Iterable<CsvLogEntry>? customList]) {
-    final list = customList ?? (isBenchmarkRunning ? _benchmarkEntries : _entries);
+  Map<String, dynamic> computeBenchmarkStats([
+    Iterable<CsvLogEntry>? customList,
+  ]) {
+    final list =
+        customList ?? (isBenchmarkRunning ? _benchmarkEntries : _entries);
     if (list.isEmpty) {
       return {
         'status': 'Chưa có số liệu (Cần chạy trên máy thật)',
@@ -226,21 +233,43 @@ class CsvLogger {
   String exportBenchmarkCsv() {
     final stats = computeBenchmarkStats(_benchmarkEntries);
     final buffer = StringBuffer();
-    buffer.writeln('# ============================================================');
+    buffer.writeln(
+      '# ============================================================',
+    );
     buffer.writeln('# BÁO CÁO BENCHMARK HIỆU NĂNG 3 PHÚT - BE MY EYES VN');
-    buffer.writeln('# ============================================================');
-    buffer.writeln('# TRẠNG THÁI SỐ LIỆU: CẦN CHẠY TRÊN MÁY THẬT ĐỂ LẤY SỐ LIỆU KIỂM CHỨNG.');
-    buffer.writeln('# KHÔNG TỰ KHẲNG ĐỊNH KẾT QUẢ KHI CHƯA CÓ FILE LOG ĐO ĐẠC NÀY.');
+    buffer.writeln(
+      '# ============================================================',
+    );
+    buffer.writeln(
+      '# TRẠNG THÁI SỐ LIỆU: CẦN CHẠY TRÊN MÁY THẬT ĐỂ LẤY SỐ LIỆU KIỂM CHỨNG.',
+    );
+    buffer.writeln(
+      '# KHÔNG TỰ KHẲNG ĐỊNH KẾT QUẢ KHI CHƯA CÓ FILE LOG ĐO ĐẠC NÀY.',
+    );
     buffer.writeln('# Thời lượng đo dự kiến: $benchmarkDurationSeconds giây');
-    buffer.writeln('# Số khung hình ghi nhận: ${stats['frameCount']} khung hình');
-    buffer.writeln('# FPS trung bình: ${(stats['avgFps'] as double).toStringAsFixed(1)} (Min: ${(stats['minFps'] as double).toStringAsFixed(1)}, Max: ${(stats['maxFps'] as double).toStringAsFixed(1)})');
+    buffer.writeln(
+      '# Số khung hình ghi nhận: ${stats['frameCount']} khung hình',
+    );
+    buffer.writeln(
+      '# FPS trung bình: ${(stats['avgFps'] as double).toStringAsFixed(1)} (Min: ${(stats['minFps'] as double).toStringAsFixed(1)}, Max: ${(stats['maxFps'] as double).toStringAsFixed(1)})',
+    );
     buffer.writeln('# Độ trễ trung bình:');
-    buffer.writeln('#   - Tiền xử lý camera->RGB: ${(stats['avgPreprocessMs'] as double).toStringAsFixed(1)} ms');
-    buffer.writeln('#   - Suy luận TFLite:        ${(stats['avgInferenceMs'] as double).toStringAsFixed(1)} ms');
-    buffer.writeln('#   - Phân tích không gian:   ${(stats['avgAnalysisMs'] as double).toStringAsFixed(1)} ms');
-    buffer.writeln('#   - Tổng độ trễ pipeline:   ${(stats['avgTotalMs'] as double).toStringAsFixed(1)} ms');
+    buffer.writeln(
+      '#   - Tiền xử lý camera->RGB: ${(stats['avgPreprocessMs'] as double).toStringAsFixed(1)} ms',
+    );
+    buffer.writeln(
+      '#   - Suy luận TFLite:        ${(stats['avgInferenceMs'] as double).toStringAsFixed(1)} ms',
+    );
+    buffer.writeln(
+      '#   - Phân tích không gian:   ${(stats['avgAnalysisMs'] as double).toStringAsFixed(1)} ms',
+    );
+    buffer.writeln(
+      '#   - Tổng độ trễ pipeline:   ${(stats['avgTotalMs'] as double).toStringAsFixed(1)} ms',
+    );
     buffer.writeln('# Delegate AI sử dụng: ${stats['delegate']}');
-    buffer.writeln('# ============================================================');
+    buffer.writeln(
+      '# ============================================================',
+    );
     buffer.writeln(csvHeader);
     for (final entry in _benchmarkEntries) {
       buffer.writeln(entry.toCsvRow());
@@ -250,7 +279,9 @@ class CsvLogger {
 
   String exportCsv() {
     final buffer = StringBuffer();
-    buffer.writeln('# TRẠNG THÁI: DỮ LIỆU CẦN ĐO TRÊN THIẾT BỊ THẬT, KHÔNG TỰ BỊA SỐ HIỆU NĂNG');
+    buffer.writeln(
+      '# TRẠNG THÁI: DỮ LIỆU CẦN ĐO TRÊN THIẾT BỊ THẬT, KHÔNG TỰ BỊA SỐ HIỆU NĂNG',
+    );
     buffer.writeln(csvHeader);
     for (final entry in _entries) {
       buffer.writeln(entry.toCsvRow());

@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../services/audio_haptics_service.dart';
 
 /// safety_disclaimer_dialog.dart
@@ -15,35 +18,48 @@ class SafetyDisclaimerDialog extends StatelessWidget {
     required this.onAccepted,
   }) : super(key: key);
 
-  static Future<void> checkAndShow(BuildContext context, AudioHapticsService audio) async {
+  static Future<bool> checkAndShow(
+    BuildContext context,
+    AudioHapticsService audio, {
+    bool forceShow = false,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     final accepted = prefs.getBool('bemyeye_disclaimer_accepted') ?? false;
 
-    if (!accepted && context.mounted) {
-      // Đọc to tóm tắt điều khoản an toàn
-      Future.delayed(const Duration(milliseconds: 600), () {
+    if (accepted && !forceShow) return true;
+    if (!context.mounted) return false;
+
+    // Đọc to tóm tắt điều khoản an toàn sau khi hộp thoại đã xuất hiện.
+    unawaited(
+      Future<void>.delayed(const Duration(milliseconds: 600), () {
+        if (!context.mounted) return;
         audio.speakVietnamese(
           'Chào mừng bạn đến với Be My Eyes Việt Nam. Xin lưu ý: Ứng dụng này chỉ là công cụ bổ trợ, tuyệt đối không thay thế gậy trắng hay người dẫn đường. Chạm nút dưới cùng để đồng ý.',
           force: true,
         );
-      });
+      }),
+    );
 
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => SafetyDisclaimerDialog(
-          audio: audio,
-          onAccepted: () async {
-            await prefs.setBool('bemyeye_disclaimer_accepted', true);
-            if (ctx.mounted) Navigator.of(ctx).pop();
-            audio.speakVietnamese(
-              'Bạn đã đồng ý với điều khoản an toàn. Chúc bạn có chuyến đi an toàn.',
-              force: true,
-            );
-          },
-        ),
-      );
-    }
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => SafetyDisclaimerDialog(
+        audio: audio,
+        onAccepted: () async {
+          final saved = await prefs.setBool(
+            'bemyeye_disclaimer_accepted',
+            true,
+          );
+          if (!saved) return;
+          if (ctx.mounted) Navigator.of(ctx).pop(true);
+          audio.speakVietnamese(
+            'Bạn đã đồng ý với điều khoản an toàn. Chúc bạn có chuyến đi an toàn.',
+            force: true,
+          );
+        },
+      ),
+    );
+    return result ?? false;
   }
 
   @override
@@ -104,7 +120,10 @@ class SafetyDisclaimerDialog extends StatelessWidget {
                     onPressed: onAccepted,
                     child: const Text(
                       'TÔI HIỂU RÕ VÀ ĐỒNG Ý',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
@@ -126,11 +145,18 @@ class SafetyDisclaimerDialog extends StatelessWidget {
           Expanded(
             child: RichText(
               text: TextSpan(
-                style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.4),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
                 children: [
                   TextSpan(
                     text: '$title ',
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFFACC15)),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFFACC15),
+                    ),
                   ),
                   TextSpan(text: desc),
                 ],

@@ -6,7 +6,9 @@ import 'package:be_my_eye_vn/services/alert_decision_engine.dart';
 
 void main() {
   group('NV4 - Sửa lỗi lặp giọng nói và cắt ngang câu (Lỗi 2)', () {
-    test('Đồng hồ giả lập: Trong 5 giây có mối đe dọa liên tục (mỗi 240ms) thì chỉ phát giọng nói <= 2 lần', () {
+    test(
+        'Đồng hồ giả lập: Trong 5 giây có mối đe dọa liên tục (mỗi 240ms) thì chỉ phát giọng nói <= 2 lần',
+        () {
       final audio = AudioHapticsService(customSpeaker: (text) async {});
       final engine = AlertDecisionEngine(audio: audio);
 
@@ -38,7 +40,10 @@ void main() {
 
       // Tiêu chí bắt buộc: Trong 5 giây mối đe dọa liên tục chỉ được nói <= 2 lần
       expect(audio.speechInvocationCount, lessThanOrEqualTo(2));
-      expect(audio.speechInvocationCount, equals(2)); // Lần 1 ở t=0, lần 2 ở t=3120ms
+      expect(
+        audio.speechInvocationCount,
+        equals(2),
+      ); // Lần 1 ở t=0, lần 2 ở t=3120ms
       expect(audio.spokenHistory.length, equals(2));
       expect(audio.spokenHistory[0], equals('Xe máy đang tới gần!'));
       expect(audio.spokenHistory[1], equals('Xe máy đang tới gần!'));
@@ -46,7 +51,8 @@ void main() {
       audio.dispose();
     });
 
-    test('Mối đe dọa theo ID/loại chỉ nói 1 lần rồi im lặng tối thiểu 3 giây', () {
+    test('Mối đe dọa theo ID/loại chỉ nói 1 lần rồi im lặng tối thiểu 3 giây',
+        () {
       final audio = AudioHapticsService(customSpeaker: (text) async {});
       final engine = AlertDecisionEngine(audio: audio);
 
@@ -85,7 +91,9 @@ void main() {
       audio.dispose();
     });
 
-    test('Chỉ ngắt câu khi mối đe dọa mới có mức ưu tiên cao hơn hẳn (Bậc bước xuống ngắt Vật cản thường)', () {
+    test(
+        'Chỉ ngắt câu khi mối đe dọa mới có mức ưu tiên cao hơn hẳn (Bậc bước xuống ngắt Vật cản thường)',
+        () {
       final audio = AudioHapticsService(customSpeaker: (text) async {});
       final engine = AlertDecisionEngine(audio: audio);
 
@@ -106,7 +114,11 @@ void main() {
       );
 
       // t = 0ms: Vật cản bình thường trước mặt (Ưu tiên 160)
-      engine.process(objects2D: [normalObstacle], groundHazards: [], customNow: 0);
+      engine.process(
+        objects2D: [normalObstacle],
+        groundHazards: [],
+        customNow: 0,
+      );
       expect(audio.speechInvocationCount, equals(1));
       expect(audio.spokenHistory.last, equals('Vật cản trước mặt'));
 
@@ -122,7 +134,11 @@ void main() {
       );
 
       // Phải lập tức ngắt câu cũ và phát câu cảnh báo bậc bước xuống
-      engine.process(objects2D: [], groundHazards: [stepDownHazard], customNow: 1000);
+      engine.process(
+        objects2D: [],
+        groundHazards: [stepDownHazard],
+        customNow: 1000,
+      );
       expect(audio.speechInvocationCount, equals(2));
       expect(audio.spokenHistory.last, equals('Chú ý: bậc đi xuống!'));
 
@@ -138,8 +154,15 @@ void main() {
       );
 
       // Ưu tiên thấp hơn bậc bước xuống -> KHÔNG được phép ngắt câu
-      engine.process(objects2D: [], groundHazards: [stepUpHazard], customNow: 1500);
-      expect(audio.speechInvocationCount, equals(2)); // Vẫn là 2, không nói thêm
+      engine.process(
+        objects2D: [],
+        groundHazards: [stepUpHazard],
+        customNow: 1500,
+      );
+      expect(
+        audio.speechInvocationCount,
+        equals(2),
+      ); // Vẫn là 2, không nói thêm
 
       audio.dispose();
     });

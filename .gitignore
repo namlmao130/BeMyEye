@@ -14,6 +14,10 @@ pubspec.lock
 !flutter_app/pubspec.lock
 .flutter-plugins
 .flutter-plugins-dependencies
+**/GeneratedPluginRegistrant.*
+flutter_app/ios/Flutter/Generated.xcconfig
+flutter_app/ios/Flutter/flutter_export_environment.sh
+flutter_app/ios/Flutter/ephemeral/
 .tools/
 .pub-cache/
 __pycache__/

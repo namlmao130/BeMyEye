@@ -40,7 +40,7 @@ def run_test():
             interpreter = tf.lite.Interpreter(model_path=model_path)
         except ImportError:
             print("\n[CẢNH BÁO] Chưa cài đặt tflite_runtime hoặc tensorflow trên môi trường Python này.")
-            print("Để chạy suy luận trực tiếp trên máy, cài đặt: pip install tflite-runtime pillow")
+            print("Để chạy suy luận trực tiếp trên máy, cài đặt: pip install -r requirements.txt")
             print("-> Xác nhận tính đúng đắn qua cấu trúc tensor và kiểm thử Dart Integration Test.")
             return
 
@@ -62,7 +62,7 @@ def run_test():
         img_resized = img.resize((300, 300))
         input_data = np.expand_dims(np.array(img_resized, dtype=np.uint8), axis=0)
     except ImportError:
-        print("Cần thư viện pillow và numpy để xử lý ảnh: pip install pillow numpy")
+        print("Cần thư viện Pillow và NumPy: pip install -r requirements.txt")
         return
 
     # Chạy suy luận

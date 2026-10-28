@@ -1,17 +1,29 @@
 import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:be_my_eye_vn/config/thresholds.dart';
 import 'package:be_my_eye_vn/services/detector_service.dart';
 
 void main() {
-  group('NV12.1 - Sửa lệch nhãn SSD MobileNet (kLabelOffset = 1) & Kiểm thử ảnh xe buýt', () {
-    test('Hằng số kLabelOffset = 1 được định nghĩa và kiểm tra biên chính xác', () {
-      expect(kLabelOffset, equals(1));
-    });
+  group(
+      'NV12.1 - Sửa lệch nhãn SSD MobileNet (kLabelOffset = 1) & Kiểm thử ảnh xe buýt',
+      () {
+    test(
+      'Hằng số kLabelOffset = 1 được định nghĩa và kiểm tra biên chính xác',
+      () {
+        expect(kLabelOffset, equals(1));
+      },
+    );
 
-    test('Đọc tệp labelmap.txt thật và xác minh chỉ số dòng tương ứng với SSD MobileNet', () {
+    test(
+        'Đọc tệp labelmap.txt thật và xác minh chỉ số dòng tương ứng với SSD MobileNet',
+        () {
       final labelFile = File('assets/models/labelmap.txt');
-      expect(labelFile.existsSync(), isTrue, reason: 'Tệp assets/models/labelmap.txt phải tồn tại');
+      expect(
+        labelFile.existsSync(),
+        isTrue,
+        reason: 'Tệp assets/models/labelmap.txt phải tồn tại',
+      );
 
       final content = labelFile.readAsStringSync();
       final labels = DetectorService.parseLabels(content);
@@ -36,13 +48,16 @@ void main() {
       expect(labels[5 + kLabelOffset], equals('bus'));
     });
 
-    test('Mô phỏng đầu ra ảnh xe buýt (bus.jpg): Kỳ vọng >= 3 "person" và >= 1 "bus"', () async {
+    test(
+        'Mô phỏng đầu ra ảnh xe buýt (bus.jpg): Kỳ vọng >= 3 "person" và >= 1 "bus"',
+        () async {
       final labelFile = File('assets/models/labelmap.txt');
       final labelContent = labelFile.readAsStringSync();
 
       final detector = DetectorService(
         stringLoader: (_) async => labelContent,
-        interpreterCreator: (_, {options}) => Future.error(Exception('mock interpreter')),
+        interpreterCreator: (_, {options}) =>
+            Future.error(Exception('mock interpreter')),
       );
 
       await detector.loadModel();
@@ -78,7 +93,7 @@ void main() {
         if (p['class'] == 'person') {
           personCount++;
           expect(p['vietnameseClass'], equals('Người'));
-          expect(p['category'], equals('obstacle'));
+          expect(p['category'], equals('pedestrian'));
         } else if (p['class'] == 'bus') {
           busCount++;
           expect(p['vietnameseClass'], equals('Xe buýt'));
@@ -88,13 +103,19 @@ void main() {
       }
 
       // Tiêu chí nghiệm thu NV12.1:
-      expect(personCount, greaterThanOrEqualTo(3), reason: 'Kỳ vọng >= 3 person');
+      expect(
+        personCount,
+        greaterThanOrEqualTo(3),
+        reason: 'Kỳ vọng >= 3 person',
+      );
       expect(busCount, greaterThanOrEqualTo(1), reason: 'Kỳ vọng >= 1 bus');
       expect(personCount, equals(4));
       expect(busCount, equals(1));
     });
 
-    test('Chứng minh lỗi cũ nếu KHÔNG có kLabelOffset: Người bị bỏ sót thành ???, xe buýt thành airplane', () async {
+    test(
+        'Chứng minh lỗi cũ nếu KHÔNG có kLabelOffset: Người bị bỏ sót thành ???, xe buýt thành airplane',
+        () async {
       final labelFile = File('assets/models/labelmap.txt');
       final labels = DetectorService.parseLabels(labelFile.readAsStringSync());
 
@@ -105,8 +126,16 @@ void main() {
       final wrongPerson = labels[rawPersonClass];
       final wrongBus = labels[rawBusClass];
 
-      expect(wrongPerson, equals('???'), reason: 'Nếu không offset, người đi bộ bị gán vào ??? và bị loại');
-      expect(wrongBus, equals('airplane'), reason: 'Nếu không offset, xe buýt bị nhầm thành máy bay');
+      expect(
+        wrongPerson,
+        equals('???'),
+        reason: 'Nếu không offset, người đi bộ bị gán vào ??? và bị loại',
+      );
+      expect(
+        wrongBus,
+        equals('airplane'),
+        reason: 'Nếu không offset, xe buýt bị nhầm thành máy bay',
+      );
 
       // Có offset kLabelOffset = 1:
       final correctPerson = labels[rawPersonClass + kLabelOffset];

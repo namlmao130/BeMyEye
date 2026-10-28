@@ -1,7 +1,9 @@
 import 'dart:async';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
+
 import '../config/thresholds.dart';
 import '../models/detection_result.dart';
 import '../models/ground_hazard.dart';
@@ -38,7 +40,8 @@ class _DevicePipelineCamera implements PipelineCamera {
 
   @override
   Future<void> initialize() async {
-    final cameras = customCamera == null ? await availableCameras() : [customCamera!];
+    final cameras =
+        customCamera == null ? await availableCameras() : [customCamera!];
     if (_disposed) return;
     if (cameras.isEmpty) throw StateError('Không tìm thấy camera');
     final target = cameras.firstWhere(
@@ -49,7 +52,10 @@ class _DevicePipelineCamera implements PipelineCamera {
     for (final preset in [ResolutionPreset.low, ResolutionPreset.medium]) {
       if (_disposed) return;
       final candidate = CameraController(
-        target, preset, enableAudio: false, imageFormatGroup: ImageFormatGroup.yuv420,
+        target,
+        preset,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.yuv420,
       );
       _controller = candidate;
       try {
@@ -69,37 +75,54 @@ class _DevicePipelineCamera implements PipelineCamera {
   @override
   Future<void> start(void Function(CameraFrameData) onFrame) async {
     final camera = _controller;
-    if (_disposed || camera == null) throw StateError('Camera chưa được khởi tạo');
+    if (_disposed || camera == null)
+      throw StateError('Camera chưa được khởi tạo');
     await camera.startImageStream((image) {
       if (image.planes.isEmpty ||
           (image.format.group != ImageFormatGroup.yuv420 &&
               image.format.group != ImageFormatGroup.bgra8888)) {
         // Invalid frames fail visibly during validation, never become a black image.
-        onFrame(CameraFrameData(yPlane: Uint8List(0), yRowStride: 0,
-            yPixelStride: 1, width: 0, height: 0, sensorOrientation: 0));
+        onFrame(
+          CameraFrameData(
+            yPlane: Uint8List(0),
+            yRowStride: 0,
+            yPixelStride: 1,
+            width: 0,
+            height: 0,
+            sensorOrientation: 0,
+          ),
+        );
         return;
       }
-      onFrame(CameraFrameData(
-        yPlane: image.planes[0].bytes,
-        uPlane: image.planes.length > 1 ? image.planes[1].bytes : null,
-        vPlane: image.planes.length > 2 ? image.planes[2].bytes : null,
-        yRowStride: image.planes[0].bytesPerRow,
-        uvRowStride: image.planes.length > 1 ? image.planes[1].bytesPerRow : 0,
-        yPixelStride: image.planes[0].bytesPerPixel ?? 1,
-        uvPixelStride: image.planes.length > 1 ? (image.planes[1].bytesPerPixel ?? 1) : 1,
-        vRowStride: image.planes.length > 2 ? image.planes[2].bytesPerRow : null,
-        vPixelStride: image.planes.length > 2 ? image.planes[2].bytesPerPixel : null,
-        width: image.width,
-        height: image.height,
-        sensorOrientation: camera.description.sensorOrientation,
-        isBgra: image.format.group == ImageFormatGroup.bgra8888,
-      ));
+      onFrame(
+        CameraFrameData(
+          yPlane: image.planes[0].bytes,
+          uPlane: image.planes.length > 1 ? image.planes[1].bytes : null,
+          vPlane: image.planes.length > 2 ? image.planes[2].bytes : null,
+          yRowStride: image.planes[0].bytesPerRow,
+          uvRowStride:
+              image.planes.length > 1 ? image.planes[1].bytesPerRow : 0,
+          yPixelStride: image.planes[0].bytesPerPixel ?? 1,
+          uvPixelStride: image.planes.length > 1
+              ? (image.planes[1].bytesPerPixel ?? 1)
+              : 1,
+          vRowStride:
+              image.planes.length > 2 ? image.planes[2].bytesPerRow : null,
+          vPixelStride:
+              image.planes.length > 2 ? image.planes[2].bytesPerPixel : null,
+          width: image.width,
+          height: image.height,
+          sensorOrientation: camera.description.sensorOrientation,
+          isBgra: image.format.group == ImageFormatGroup.bgra8888,
+        ),
+      );
     });
   }
 
   @override
   Future<void> stop() async {
-    if (_controller?.value.isStreamingImages ?? false) await _controller!.stopImageStream();
+    if (_controller?.value.isStreamingImages ?? false)
+      await _controller!.stopImageStream();
   }
 
   @override
@@ -178,7 +201,8 @@ class CameraPipelineService {
     Future<bool> Function()? requestCameraPermission,
     int Function()? clock,
   })  : _cameraFactory = cameraFactory ?? _DevicePipelineCamera.new,
-        _requestCameraPermission = requestCameraPermission ?? _ensureCameraPermission,
+        _requestCameraPermission =
+            requestCameraPermission ?? _ensureCameraPermission,
         _now = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
 
   static Future<bool> _ensureCameraPermission() async {
@@ -187,14 +211,20 @@ class CameraPipelineService {
   }
 
   bool _isCurrent(int generation) =>
-      !_disposed && _desiredStreaming && generation == _generation && _status != PipelineStatus.failed;
+      !_disposed &&
+      _desiredStreaming &&
+      generation == _generation &&
+      _status != PipelineStatus.failed;
 
   Future<void> _enqueue(Future<void> Function() operation) {
     final result = _lifecycle.then((_) => operation());
     // Keep the queue usable without hiding errors from the caller awaiting result.
-    _lifecycle = result.then<void>((_) {}, onError: (Object error, StackTrace stack) {
-      debugPrint('Camera lifecycle: $error');
-    });
+    _lifecycle = result.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stack) {
+        debugPrint('Camera lifecycle: $error');
+      },
+    );
     return result;
   }
 
@@ -210,22 +240,39 @@ class CameraPipelineService {
     _frameCount = 0;
   }
 
-  void updateStatus(PipelineStatus newStatus, {String? reason, String? failureSpeech}) {
+  void updateStatus(
+    PipelineStatus newStatus, {
+    String? reason,
+    String? failureSpeech,
+  }) {
     if (_disposed || _status == newStatus) return;
-    if (_status == PipelineStatus.failed && newStatus == PipelineStatus.running) return;
-    if (newStatus == PipelineStatus.running && _lastSuccessfulFrameTimestamp == null) return;
+    if (_status == PipelineStatus.failed && newStatus == PipelineStatus.running)
+      return;
+    if (newStatus == PipelineStatus.running &&
+        _lastSuccessfulFrameTimestamp == null) return;
     final oldStatus = _status;
     _status = newStatus;
-    debugPrint('PipelineStatus: $oldStatus -> $newStatus (${reason ?? "no reason"})');
+    debugPrint(
+      'PipelineStatus: $oldStatus -> $newStatus (${reason ?? "no reason"})',
+    );
     if (newStatus == PipelineStatus.running) {
-      unawaited(alertEngine.audio.speakVietnamese('Đã bật trợ lý dẫn đường', force: true, priority: 100));
+      unawaited(
+        alertEngine.audio.speakVietnamese(
+          'Đã bật trợ lý dẫn đường',
+          force: true,
+          priority: 100,
+        ),
+      );
     } else if (newStatus == PipelineStatus.failed) {
       failureReason = reason;
       _clearScene();
-      unawaited(alertEngine.audio.speakVietnamese(
-        failureSpeech ?? 'Mất tín hiệu camera, đừng dùng để dẫn đường',
-        force: true, priority: 300,
-      ));
+      unawaited(
+        alertEngine.audio.speakVietnamese(
+          failureSpeech ?? 'Mất tín hiệu camera, đừng dùng để dẫn đường',
+          force: true,
+          priority: 300,
+        ),
+      );
       unawaited(stopStream());
     }
     onStatusChanged?.call();
@@ -236,12 +283,20 @@ class CameraPipelineService {
   void checkWatchdog([int? customNow]) {
     if (_disposed || !_desiredStreaming) return;
     final now = customNow ?? _now();
-    if (_status == PipelineStatus.starting && now - _startTimestamp > kPipelineStartupTimeoutMs) {
-      updateStatus(PipelineStatus.failed, reason: 'Quá thời gian khởi động camera và nhận diện');
+    if (_status == PipelineStatus.starting &&
+        now - _startTimestamp > kPipelineStartupTimeoutMs) {
+      updateStatus(
+        PipelineStatus.failed,
+        reason: 'Quá thời gian khởi động camera và nhận diện',
+      );
     } else if (_status == PipelineStatus.running &&
         (_lastSuccessfulFrameTimestamp == null ||
             now - _lastSuccessfulFrameTimestamp! > kWatchdogFrameTimeoutMs)) {
-      updateStatus(PipelineStatus.failed, reason: 'Không có kết quả nhận diện mới trong ${kWatchdogFrameTimeoutMs}ms');
+      updateStatus(
+        PipelineStatus.failed,
+        reason:
+            'Không có kết quả nhận diện mới trong ${kWatchdogFrameTimeoutMs}ms',
+      );
     }
   }
 
@@ -253,10 +308,15 @@ class CameraPipelineService {
     });
   }
 
-  Future<void> _initializeCamera(int generation, CameraDescription? customCamera) async {
+  Future<void> _initializeCamera(
+    int generation,
+    CameraDescription? customCamera,
+  ) async {
     final camera = _cameraFactory(customCamera);
     _camera = camera;
-    await camera.initialize().timeout(const Duration(milliseconds: kPipelineStartupTimeoutMs));
+    await camera.initialize().timeout(
+          const Duration(milliseconds: kPipelineStartupTimeoutMs),
+        );
     if (_disposed || generation != _generation) return;
     _isInitialized = true;
   }
@@ -276,32 +336,47 @@ class CameraPipelineService {
     _lastFpsCalcTime = _startTimestamp;
     updateStatus(PipelineStatus.starting);
     _watchdogTimer?.cancel();
-    _watchdogTimer = Timer.periodic(const Duration(milliseconds: 250), (_) => checkWatchdog());
+    _watchdogTimer = Timer.periodic(
+      const Duration(milliseconds: 250),
+      (_) => checkWatchdog(),
+    );
     final operation = _enqueue(() async {
       try {
         if (!_isCurrent(generation)) return;
-        final permission = await _requestCameraPermission()
-            .timeout(const Duration(milliseconds: kPipelineStartupTimeoutMs));
+        final permission = await _requestCameraPermission().timeout(
+          const Duration(milliseconds: kPipelineStartupTimeoutMs),
+        );
         if (!_isCurrent(generation)) return;
         if (!permission) {
-          updateStatus(PipelineStatus.failed, reason: 'Quyền camera bị từ chối',
-              failureSpeech: 'Chưa cấp quyền camera, không thể dẫn đường');
+          updateStatus(
+            PipelineStatus.failed,
+            reason: 'Quyền camera bị từ chối',
+            failureSpeech: 'Chưa cấp quyền camera, không thể dẫn đường',
+          );
           return;
         }
         if (!detectorService.isReady) {
-          updateStatus(PipelineStatus.failed, reason: detectorService.loadError ?? 'Mô hình nhận diện chưa sẵn sàng',
-              failureSpeech: 'Nhận diện chưa sẵn sàng, không thể dẫn đường');
+          updateStatus(
+            PipelineStatus.failed,
+            reason:
+                detectorService.loadError ?? 'Mô hình nhận diện chưa sẵn sàng',
+            failureSpeech: 'Nhận diện chưa sẵn sàng, không thể dẫn đường',
+          );
           return;
         }
         if (!_isInitialized) await _initializeCamera(generation, null);
         if (!_isCurrent(generation)) return;
         _isStreaming = true;
-        await _camera!.start((frame) => _handleFrame(frame, generation))
+        await _camera!
+            .start((frame) => _handleFrame(frame, generation))
             .timeout(const Duration(milliseconds: kPipelineStartupTimeoutMs));
       } catch (error) {
         if (_isCurrent(generation)) {
-          updateStatus(PipelineStatus.failed, reason: 'Không thể khởi động camera: $error',
-              failureSpeech: 'Không thể khởi động camera, đừng dùng để dẫn đường');
+          updateStatus(
+            PipelineStatus.failed,
+            reason: 'Không thể khởi động camera: $error',
+            failureSpeech: 'Không thể khởi động camera, đừng dùng để dẫn đường',
+          );
         }
       }
     });
@@ -316,7 +391,8 @@ class CameraPipelineService {
     _watchdogTimer?.cancel();
     _watchdogTimer = null;
     _clearScene();
-    if (!_disposed && _status != PipelineStatus.failed) updateStatus(PipelineStatus.demo);
+    if (!_disposed && _status != PipelineStatus.failed)
+      updateStatus(PipelineStatus.demo);
     return _enqueue(_releaseCamera);
   }
 
@@ -326,12 +402,16 @@ class CameraPipelineService {
     _isInitialized = false;
     if (camera == null) return;
     try {
-      await camera.stop().timeout(const Duration(milliseconds: kPipelineStartupTimeoutMs));
+      await camera.stop().timeout(
+            const Duration(milliseconds: kPipelineStartupTimeoutMs),
+          );
     } catch (error) {
       debugPrint('Lỗi dừng camera: $error');
     } finally {
       try {
-        await camera.dispose().timeout(const Duration(milliseconds: kPipelineStartupTimeoutMs));
+        await camera.dispose().timeout(
+              const Duration(milliseconds: kPipelineStartupTimeoutMs),
+            );
       } catch (error) {
         debugPrint('Lỗi giải phóng camera: $error');
       }
@@ -346,37 +426,68 @@ class CameraPipelineService {
     _executePipeline(frame, now, generation);
   }
 
-  void _executePipeline(CameraFrameData frameData, int frameStartTime, int generation) {
+  void _executePipeline(
+    CameraFrameData frameData,
+    int frameStartTime,
+    int generation, {
+    int? syntheticNow,
+  }) {
     _isProcessingFrame = true;
     try {
-      if (!detectorService.isReady) throw StateError('Mô hình nhận diện không sẵn sàng');
+      if (!detectorService.isReady) {
+        updateStatus(
+          PipelineStatus.failed,
+          reason: 'Mô hình nhận diện không sẵn sàng',
+          failureSpeech: 'Nhận diện chưa sẵn sàng, không thể dẫn đường',
+        );
+        return;
+      }
       if (healthService != null) {
         batteryOptimizer.updateBatteryAndThermal(
-          batteryLevel: healthService!.batteryLevel, thermalStatus: healthService!.thermalStatus);
+          batteryLevel: healthService!.batteryLevel,
+          thermalStatus: healthService!.thermalStatus,
+        );
       }
       if (batteryOptimizer.shouldAnnounceThermalWarning(frameStartTime)) {
-        unawaited(alertEngine.audio.speakVietnamese('Thiết bị quá nhiệt, giảm tốc độ xử lý', force: true, priority: 250));
+        unawaited(
+          alertEngine.audio.speakVietnamese(
+            'Thiết bị quá nhiệt, giảm tốc độ xử lý',
+            force: true,
+            priority: 250,
+          ),
+        );
       }
-      final preprocessed = preprocessCameraFrame(frameData,
-          reusableRgb300: _rgb300Buffer, reusableLuma160: _luma160Buffer);
-      final preprocessDone = _now();
+      final preprocessed = preprocessCameraFrame(
+        frameData,
+        reusableRgb300: _rgb300Buffer,
+        reusableLuma160: _luma160Buffer,
+      );
+      final preprocessDone = syntheticNow ?? _now();
       latencyPreprocessMs = preprocessDone - frameStartTime;
       final List<Map<String, dynamic>> rawDetections;
       try {
-        rawDetections = detectorService.detectFromImage(preprocessed.rgb300, 300, 300);
+        rawDetections = detectorService.detectFromImage(
+          preprocessed.rgb300,
+          300,
+          300,
+        );
         _consecutiveInferenceErrors = 0;
       } catch (error) {
         _consecutiveInferenceErrors++;
         debugPrint('Lỗi nhận diện ($_consecutiveInferenceErrors): $error');
         _clearScene();
         if (_consecutiveInferenceErrors >= kMaxConsecutiveInferenceErrors) {
-          updateStatus(PipelineStatus.failed, reason: 'Nhận diện lỗi $kMaxConsecutiveInferenceErrors lần liên tiếp');
+          updateStatus(
+            PipelineStatus.failed,
+            reason:
+                'Nhận diện lỗi $kMaxConsecutiveInferenceErrors lần liên tiếp',
+          );
         } else {
           onFrameProcessed?.call();
         }
         return; // Failed inference must not be processed as an empty scene.
       }
-      final inferenceDone = _now();
+      final inferenceDone = syntheticNow ?? _now();
       latencyInferenceMs = inferenceDone - preprocessDone;
       if (!_isCurrent(generation)) return;
       // Synchronous inference can delay Timer callbacks: reject stale results
@@ -385,22 +496,40 @@ class CameraPipelineService {
         updateStatus(PipelineStatus.failed, reason: 'Kết quả nhận diện quá cũ');
         return;
       }
-      final spatialHazards = spatialAnalyzer.analyze(rawDetections, 300, 300,
-          walkingSpeedMps: batteryOptimizer.userMovementState == 'walking' ? 1.0 : 0.0,
-          tiltAngleRad: tiltService?.effectiveTiltRad ?? 0.0);
+      final spatialHazards = spatialAnalyzer.analyze(
+        rawDetections,
+        300,
+        300,
+        walkingSpeedMps:
+            batteryOptimizer.userMovementState == 'walking' ? 1.0 : 0.0,
+        tiltAngleRad: tiltService?.effectiveTiltRad ?? 0.0,
+      );
       if (batteryOptimizer.shouldProcessGroundPlane(frameStartTime)) {
-        _cachedGroundHazards = groundAnalyzer.analyzeLuminance(preprocessed.luma160, 160, 120);
+        _cachedGroundHazards = groundAnalyzer.analyzeLuminance(
+          preprocessed.luma160,
+          160,
+          120,
+        );
       }
       final groundHazards = _cachedGroundHazards;
-      final analysisDone = _now();
-      if (!_isCurrent(generation) || analysisDone - frameStartTime > kWatchdogFrameTimeoutMs) {
-        if (_isCurrent(generation)) updateStatus(PipelineStatus.failed, reason: 'Phân tích hình ảnh quá chậm');
+      final analysisDone = syntheticNow ?? _now();
+      if (!_isCurrent(generation) ||
+          analysisDone - frameStartTime > kWatchdogFrameTimeoutMs) {
+        if (_isCurrent(generation))
+          updateStatus(
+            PipelineStatus.failed,
+            reason: 'Phân tích hình ảnh quá chậm',
+          );
         return;
       }
       _lastSuccessfulFrameTimestamp = analysisDone;
       updateStatus(PipelineStatus.running);
       if (!_isCurrent(generation)) return;
-      final threat = alertEngine.process(objects2D: spatialHazards, groundHazards: groundHazards, genericObstacles: const []);
+      final threat = alertEngine.process(
+        objects2D: spatialHazards,
+        groundHazards: groundHazards,
+        genericObstacles: const [],
+      );
       latencyAnalysisMs = analysisDone - inferenceDone;
       latencyTotalMs = analysisDone - frameStartTime;
       latestDetections = spatialHazards;
@@ -414,12 +543,20 @@ class CameraPipelineService {
         _lastFpsCalcTime = analysisDone;
       }
       if (csvLogger.isBenchmarkRunning || csvLogger.isLoggingEnabled) {
-        csvLogger.logFrame(fps: currentFps, latencyPreprocessMs: latencyPreprocessMs,
-            latencyInferenceMs: latencyInferenceMs, latencyAnalysisMs: latencyAnalysisMs,
-            latencyTotalMs: latencyTotalMs, objectCount: spatialHazards.length,
-            primaryThreat: threat?.vietnameseLabel ?? 'None', threatDirection: threat?.direction.name ?? 'None',
-            threatDistance: threat?.approximateDistanceMeters ?? 'None', delegate: detectorService.activeDelegate,
-            batteryLevel: batteryOptimizer.batteryLevel, thermalStatus: batteryOptimizer.thermalStatus);
+        csvLogger.logFrame(
+          fps: currentFps,
+          latencyPreprocessMs: latencyPreprocessMs,
+          latencyInferenceMs: latencyInferenceMs,
+          latencyAnalysisMs: latencyAnalysisMs,
+          latencyTotalMs: latencyTotalMs,
+          objectCount: spatialHazards.length,
+          primaryThreat: threat?.vietnameseLabel ?? 'None',
+          threatDirection: threat?.direction.name ?? 'None',
+          threatDistance: threat?.approximateDistanceMeters ?? 'None',
+          delegate: detectorService.activeDelegate,
+          batteryLevel: batteryOptimizer.batteryLevel,
+          thermalStatus: batteryOptimizer.thermalStatus,
+        );
       }
       onFrameProcessed?.call();
     } catch (error) {
@@ -430,8 +567,12 @@ class CameraPipelineService {
   }
 
   /// Benchmark hook. Lifecycle tests inject PipelineCamera and call startStream.
-  Future<void> processSyntheticFrame(CameraFrameData frameData, {int? customNow}) async {
-    if (_disposed || _status == PipelineStatus.failed || _isProcessingFrame) return;
+  Future<void> processSyntheticFrame(
+    CameraFrameData frameData, {
+    int? customNow,
+  }) async {
+    if (_disposed || _status == PipelineStatus.failed || _isProcessingFrame)
+      return;
     if (!_desiredStreaming) {
       _desiredStreaming = true;
       ++_generation;
@@ -443,7 +584,12 @@ class CameraPipelineService {
     }
     final now = customNow ?? _now();
     _lastFrameTimestamp = now;
-    _executePipeline(frameData, now, _generation);
+    _executePipeline(
+      frameData,
+      now,
+      _generation,
+      syntheticNow: customNow,
+    );
   }
 
   Future<void> dispose() {

@@ -2,6 +2,7 @@
 /// Model dữ liệu đối tượng phát hiện từ mô hình thị giác AI và phân tích không gian
 
 enum DistanceLevel { far, near, critical }
+
 enum DirectionZone { left, center, right }
 
 class DetectionResult {
@@ -24,9 +25,9 @@ class DetectionResult {
   final String approximateDistanceMeters;
 
   // Thuộc tính hiểm họa đặc biệt
-  final bool isApproaching;      // Đang lao tới nhanh
-  final double growthRate;       // Tốc độ nở bounding box
-  final bool isHeadLevelHazard;  // Vật cản tầm đầu/ngực (bạt che)
+  final bool isApproaching; // Đang lao tới nhanh
+  final double growthRate; // Tốc độ nở bounding box
+  final bool isHeadLevelHazard; // Vật cản tầm đầu/ngực (bạt che)
 
   DetectionResult({
     required this.id,

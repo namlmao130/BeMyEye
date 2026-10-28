@@ -71,55 +71,64 @@ class AlertDecisionEngine {
     // 1. Lọc vật thể 2D & Deadzone Filter
     for (final obj in objects2D) {
       final bool isExtremeEdge = (obj.centerX < 0.15 || obj.centerX > 0.85);
-      if (isExtremeEdge && obj.distanceLevel == DistanceLevel.far && !obj.isApproaching) {
+      if (isExtremeEdge &&
+          obj.distanceLevel == DistanceLevel.far &&
+          !obj.isApproaching) {
         continue; // Bỏ qua vật cản xa ở góc ngoài để tránh spam âm thanh
       }
 
-      candidates.add(AlertCandidate(
-        id: obj.id,
-        label: obj.label,
-        vietnameseLabel: obj.vietnameseLabel,
-        category: obj.category,
-        direction: obj.direction,
-        panValue: obj.panValue,
-        distanceLevel: obj.distanceLevel,
-        approximateDistanceMeters: obj.approximateDistanceMeters,
-        isApproaching: obj.isApproaching,
-        isHeadLevelHazard: obj.isHeadLevelHazard,
-      ));
+      candidates.add(
+        AlertCandidate(
+          id: obj.id,
+          label: obj.label,
+          vietnameseLabel: obj.vietnameseLabel,
+          category: obj.category,
+          direction: obj.direction,
+          panValue: obj.panValue,
+          distanceLevel: obj.distanceLevel,
+          approximateDistanceMeters: obj.approximateDistanceMeters,
+          isApproaching: obj.isApproaching,
+          isHeadLevelHazard: obj.isHeadLevelHazard,
+        ),
+      );
     }
 
     // 2. Chướng ngại vật tầm đầu
     for (final go in genericObstacles) {
-      candidates.add(AlertCandidate(
-        id: go.id,
-        label: go.label,
-        vietnameseLabel: go.vietnameseLabel,
-        category: 'obstacle',
-        direction: go.direction,
-        panValue: go.panValue,
-        distanceLevel: go.distanceLevel,
-        approximateDistanceMeters: go.approximateDistanceMeters,
-        isHeadLevelHazard: true,
-      ));
+      candidates.add(
+        AlertCandidate(
+          id: go.id,
+          label: go.label,
+          vietnameseLabel: go.vietnameseLabel,
+          category: 'obstacle',
+          direction: go.direction,
+          panValue: go.panValue,
+          distanceLevel: go.distanceLevel,
+          approximateDistanceMeters: go.approximateDistanceMeters,
+          isHeadLevelHazard: true,
+        ),
+      );
     }
 
     // 3. Hiểm họa mặt đất (Bậc tam cấp / Lề đường)
     for (final gh in groundHazards) {
-      final bool isMedium = gh.confidence < 0.80 || gh.vietnameseName.contains('Có thể');
-      candidates.add(AlertCandidate(
-        id: 'ground_${gh.type.name}_${(gh.normalizedY * 100).toInt()}',
-        label: gh.type.name,
-        vietnameseLabel: gh.vietnameseName,
-        category: 'ground_hazard',
-        direction: DirectionZone.center,
-        panValue: 0.0,
-        distanceLevel: gh.distanceLevel,
-        approximateDistanceMeters: gh.distanceMeters,
-        isNegativeObstacle: gh.isNegativeObstacle,
-        confidence: gh.confidence,
-        isMediumConfidence: isMedium,
-      ));
+      final bool isMedium =
+          gh.confidence < 0.80 || gh.vietnameseName.contains('Có thể');
+      candidates.add(
+        AlertCandidate(
+          id: 'ground_${gh.type.name}_${(gh.normalizedY * 100).toInt()}',
+          label: gh.type.name,
+          vietnameseLabel: gh.vietnameseName,
+          category: 'ground_hazard',
+          direction: DirectionZone.center,
+          panValue: 0.0,
+          distanceLevel: gh.distanceLevel,
+          approximateDistanceMeters: gh.distanceMeters,
+          isNegativeObstacle: gh.isNegativeObstacle,
+          confidence: gh.confidence,
+          isMediumConfidence: isMedium,
+        ),
+      );
     }
 
     // NẾU KHÔNG CÓ HIỂM HỌA NÀO
@@ -271,7 +280,8 @@ class AlertDecisionEngine {
       pitch = 1000;
     }
 
-    final int duration = threat.distanceLevel == DistanceLevel.critical ? 80 : 50;
+    final int duration =
+        threat.distanceLevel == DistanceLevel.critical ? 80 : 50;
     audio.playDirectionalBeep(
       pan: threat.panValue,
       pitch: pitch,
@@ -279,7 +289,8 @@ class AlertDecisionEngine {
       direction: threat.direction,
     );
 
-    if (threat.distanceLevel == DistanceLevel.critical || threat.isApproaching) {
+    if (threat.distanceLevel == DistanceLevel.critical ||
+        threat.isApproaching) {
       audio.triggerHaptic(HapticIntensity.critical);
     } else if (threat.distanceLevel == DistanceLevel.near) {
       audio.triggerHaptic(HapticIntensity.near);
@@ -321,19 +332,23 @@ class AlertDecisionEngine {
     if (text == null) return;
 
     final lastSpoken = _threatSpeechTimeMap[speechKey];
-    final int elapsedThisThreat = lastSpoken == null ? kSpeechCooldownMs : now - lastSpoken;
-    final int elapsedAnySpeech = _lastAnySpeechTime == null ? kSpeechCooldownMs : now - _lastAnySpeechTime!;
+    final int elapsedThisThreat =
+        lastSpoken == null ? kSpeechCooldownMs : now - lastSpoken;
+    final int elapsedAnySpeech = _lastAnySpeechTime == null
+        ? kSpeechCooldownMs
+        : now - _lastAnySpeechTime!;
 
     // Điều kiện phát giọng nói:
     // 1. Mối đe dọa này chưa được nói trong vòng kSpeechCooldownMs (tối thiểu 3 giây)
     // 2. VÀ hệ thống không đang nói câu khác trong 3 giây gần nhất,
     //    TRỪ KHI câu mới có mức ưu tiên cao hơn hẳn (chênh lệch >= 40 điểm) và câu cũ đã nói ít nhất 800ms
     final bool canSpeakThis = elapsedThisThreat >= kSpeechCooldownMs;
-    final bool isHigherPriorityInterrupt =
-        (speechPriority >= _lastSpokenPriority + kSpeechInterruptPriorityDelta) &&
+    final bool isHigherPriorityInterrupt = (speechPriority >=
+            _lastSpokenPriority + kSpeechInterruptPriorityDelta) &&
         (elapsedAnySpeech >= kSpeechInterruptMinDelayMs);
 
-    if (canSpeakThis && (elapsedAnySpeech >= kSpeechCooldownMs || isHigherPriorityInterrupt)) {
+    if (canSpeakThis &&
+        (elapsedAnySpeech >= kSpeechCooldownMs || isHigherPriorityInterrupt)) {
       _threatSpeechTimeMap[speechKey] = now;
       _lastAnySpeechTime = now;
       _lastSpokenPriority = speechPriority;

@@ -17,18 +17,18 @@ class Waypoint {
   });
 
   Map<String, dynamic> toJson() => {
-    'lat': lat,
-    'lng': lng,
-    'name': name,
-    'instruction': instruction,
-    'actionText': actionText,
-  };
+        'lat': lat,
+        'lng': lng,
+        'name': name,
+        'instruction': instruction,
+        'actionText': actionText,
+      };
 
   factory Waypoint.fromJson(Map<String, dynamic> json) => Waypoint(
-    lat: json['lat'],
-    lng: json['lng'],
-    name: json['name'],
-    instruction: json['instruction'],
-    actionText: json['actionText'],
-  );
+        lat: json['lat'],
+        lng: json['lng'],
+        name: json['name'],
+        instruction: json['instruction'],
+        actionText: json['actionText'],
+      );
 }

@@ -3,8 +3,11 @@ import 'package:be_my_eye_vn/services/spatial_analyzer.dart';
 import 'package:be_my_eye_vn/models/detection_result.dart';
 
 void main() {
-  group('NV5 - SpatialAnalyzer: Sửa đang tới gần và ghép track 1-1 (Lỗi 3, 4)', () {
-    test('Tiêu chí (a): Cột / ghế đứng yên + người đi tới -> KHÔNG BAO GIỜ là approaching', () {
+  group('NV5 - SpatialAnalyzer: Sửa đang tới gần và ghép track 1-1 (Lỗi 3, 4)',
+      () {
+    test(
+        'Tiêu chí (a): Cột / ghế đứng yên + người đi tới -> KHÔNG BAO GIỜ là approaching',
+        () {
       final analyzer = SpatialAnalyzer();
 
       // Giả lập người đi bộ đang tiến tới một chiếc ghế tĩnh (category: 'obstacle')
@@ -32,7 +35,7 @@ void main() {
               'vietnameseLabel': 'Ghế quán cóc',
               'category': 'obstacle', // Vật cản tĩnh
               'score': 0.88,
-            }
+            },
           ],
           300.0,
           300.0,
@@ -42,23 +45,36 @@ void main() {
 
         expect(results.length, equals(1));
         // Khẳng định bắt buộc: Vật tĩnh tuyệt đối KHÔNG bao giờ là approaching
-        expect(results[0].isApproaching, isFalse,
-            reason: 'Vật thể loại obstacle không được coi là đang lao tới!');
+        expect(
+          results[0].isApproaching,
+          isFalse,
+          reason: 'Vật thể loại obstacle không được coi là đang lao tới!',
+        );
       }
     });
 
-    test('Tiêu chí (b): Xe máy phóng tới -> isApproaching chuyển sang true sau >= 2 frames vượt ngưỡng', () {
+    test(
+        'Tiêu chí (b): Xe máy phóng tới -> isApproaching chuyển sang true sau >= 2 frames vượt ngưỡng',
+        () {
       final analyzer = SpatialAnalyzer();
 
       // Giả lập người đứng yên (0 m/s), xe máy (category: 'vehicle') phóng tới rất nhanh
       // Diện tích xe tăng liên tục từ 0.04 lên 0.32 trong ~500ms (>= 5 mẫu, >= 0.3s)
       final frames = [
-        {'time': 0, 'w': 60.0, 'h': 60.0},     // areaRatio ~ 0.040
-        {'time': 100, 'w': 75.0, 'h': 75.0},   // areaRatio ~ 0.062
-        {'time': 200, 'w': 95.0, 'h': 95.0},   // areaRatio ~ 0.100
+        {'time': 0, 'w': 60.0, 'h': 60.0}, // areaRatio ~ 0.040
+        {'time': 100, 'w': 75.0, 'h': 75.0}, // areaRatio ~ 0.062
+        {'time': 200, 'w': 95.0, 'h': 95.0}, // areaRatio ~ 0.100
         {'time': 300, 'w': 120.0, 'h': 120.0}, // areaRatio ~ 0.160
-        {'time': 400, 'w': 145.0, 'h': 145.0}, // areaRatio ~ 0.233 (frame 1 thỏa mãn hồi quy tiếp cận)
-        {'time': 500, 'w': 170.0, 'h': 170.0}, // areaRatio ~ 0.321 (frame 2 liên tiếp -> isApproaching)
+        {
+          'time': 400,
+          'w': 145.0,
+          'h': 145.0,
+        }, // areaRatio ~ 0.233 (frame 1 thỏa mãn hồi quy tiếp cận)
+        {
+          'time': 500,
+          'w': 170.0,
+          'h': 170.0,
+        }, // areaRatio ~ 0.321 (frame 2 liên tiếp -> isApproaching)
       ];
 
       List<DetectionResult> lastResults = [];
@@ -76,7 +92,7 @@ void main() {
               'vietnameseLabel': 'Xe máy',
               'category': 'vehicle',
               'score': 0.95,
-            }
+            },
           ],
           300.0,
           300.0,
@@ -91,7 +107,9 @@ void main() {
       expect(lastResults[0].distanceLevel, equals(DistanceLevel.critical));
     });
 
-    test('Tiêu chí (c): Hai xe máy gần nhau -> ghép track 1-1 gán 2 ID khác nhau, không bị trùng', () {
+    test(
+        'Tiêu chí (c): Hai xe máy gần nhau -> ghép track 1-1 gán 2 ID khác nhau, không bị trùng',
+        () {
       final analyzer = SpatialAnalyzer();
 
       // Frame 1: 2 xe máy xuất hiện cạnh nhau (cx = 0.40 và cx = 0.55)
@@ -112,7 +130,12 @@ void main() {
         },
       ];
 
-      final results1 = analyzer.analyze(frame1Detections, 300.0, 300.0, customNow: 0);
+      final results1 = analyzer.analyze(
+        frame1Detections,
+        300.0,
+        300.0,
+        customNow: 0,
+      );
 
       expect(results1.length, equals(2));
       final id1 = results1[0].id;
@@ -141,7 +164,12 @@ void main() {
         },
       ];
 
-      final results2 = analyzer.analyze(frame2Detections, 300.0, 300.0, customNow: 100);
+      final results2 = analyzer.analyze(
+        frame2Detections,
+        300.0,
+        300.0,
+        customNow: 100,
+      );
 
       expect(results2.length, equals(2));
       // Kiểm tra ghép đúng 1-1: Không xe nào bị đổi ID hoặc nhập thành một

@@ -1,4 +1,5 @@
 import 'dart:math';
+
 import '../config/thresholds.dart';
 import '../models/detection_result.dart';
 
@@ -62,7 +63,9 @@ class SpatialTrack {
     areaHistory.add(AreaSample(timestamp, area));
 
     // Cửa sổ trượt kAreaHistoryWindowMs (mặc định 800ms) để đủ ít nhất 5 mẫu và >= 0.3s
-    areaHistory.removeWhere((s) => timestamp - s.timestamp > kAreaHistoryWindowMs);
+    areaHistory.removeWhere(
+      (s) => timestamp - s.timestamp > kAreaHistoryWindowMs,
+    );
   }
 
   /// Hồi quy tuyến tính diện tích trên >= 5 mẫu, khoảng thời gian >= 0.3s để làm mượt
@@ -138,7 +141,8 @@ class SpatialTrack {
     final double relativeGrowthRate = slope / meanY;
 
     // Bù trừ chuyển động của chính người đi bộ (bước chân/GPS)
-    final double dynamicThreshold = kApproachThreshold + (walkingSpeedMps * 0.15);
+    final double dynamicThreshold =
+        kApproachThreshold + (walkingSpeedMps * 0.15);
 
     // Tính tính liên tục tăng tương đối giữa các bước kế tiếp nhau
     int nonDecreasingSteps = 0;
@@ -237,8 +241,10 @@ class SpatialAnalyzer {
       for (int tIdx = 0; tIdx < _trackedObjects.length; tIdx++) {
         final t = _trackedObjects[tIdx];
         if (t.label == d['label']) {
-          final dist = sqrt(pow(t.lastCx - (d['cx'] as double), 2) +
-              pow(t.lastCy - (d['bottomY'] as double), 2));
+          final dist = sqrt(
+            pow(t.lastCx - (d['cx'] as double), 2) +
+                pow(t.lastCy - (d['bottomY'] as double), 2),
+          );
           // Ngưỡng khoảng cách tối đa để coi là cùng 1 track (35% màn hình)
           if (dist <= 0.35) {
             matchCandidates.add(MatchCandidate(dIdx, tIdx, dist));
@@ -313,16 +319,27 @@ class SpatialAnalyzer {
       // vật thể trên mặt đất dịch lên trên khung ảnh, do đó ngưỡng bottomY PHẢI GIẢM TƯƠNG ỨNG.
       // Ngược lại khi camera ngửa lên trời (tiltAngleRad < 0), ngưỡng bottomY tăng.
       // (Cần chạy kiểm chứng trên máy thật đeo ngực).
-      final double tiltOffset = (tiltAngleRad * kTiltCompensationFactor).clamp(-0.15, 0.15);
+      final double tiltOffset = (tiltAngleRad * kTiltCompensationFactor).clamp(
+        -0.15,
+        0.15,
+      );
 
-      final double effectiveCriticalBottomY = (kCriticalBottomY - tiltOffset).clamp(0.60, 0.95);
-      final double effectiveNearBottomY = (kNearBottomY - tiltOffset).clamp(0.45, 0.85);
+      final double effectiveCriticalBottomY =
+          (kCriticalBottomY - tiltOffset).clamp(0.60, 0.95);
+      final double effectiveNearBottomY = (kNearBottomY - tiltOffset).clamp(
+        0.45,
+        0.85,
+      );
 
-      final double effectiveLargeCriticalBottomY = (kLargeVehicleCriticalBottomY - tiltOffset).clamp(0.65, 0.95);
-      final double effectiveLargeNearBottomY = (kLargeVehicleNearBottomY - tiltOffset).clamp(0.50, 0.85);
+      final double effectiveLargeCriticalBottomY =
+          (kLargeVehicleCriticalBottomY - tiltOffset).clamp(0.65, 0.95);
+      final double effectiveLargeNearBottomY =
+          (kLargeVehicleNearBottomY - tiltOffset).clamp(0.50, 0.85);
 
       // 5. ƯỚC LƯỢNG CỰ LY THEO LỚP ĐỐI TƯỢNG VÀ BÙ TRỪ GÓC NGHIÊNG
-      final bool isLargeVehicle = kLargeVehicleClasses.contains(label.toLowerCase());
+      final bool isLargeVehicle = kLargeVehicleClasses.contains(
+        label.toLowerCase(),
+      );
       DistanceLevel distLevel = DistanceLevel.far;
       String distText = '> 3.0m';
 
@@ -346,7 +363,8 @@ class SpatialAnalyzer {
         if (bottomY >= effectiveCriticalBottomY) {
           distLevel = DistanceLevel.critical;
           distText = '< 1.5m';
-        } else if (bottomY >= effectiveNearBottomY || areaRatio >= kNearAreaRatio) {
+        } else if (bottomY >= effectiveNearBottomY ||
+            areaRatio >= kNearAreaRatio) {
           distLevel = DistanceLevel.near;
           distText = '1.5m - 3.0m';
         } else {
@@ -356,10 +374,12 @@ class SpatialAnalyzer {
       } else {
         // ĐỐI VỚI XE MÁY, Ô TÔ CON VÀ CÁC VẬT CẢN KHÁC:
         if (bottomY >= effectiveCriticalBottomY ||
-            (bottomY >= effectiveNearBottomY && areaRatio >= kCriticalAreaRatio)) {
+            (bottomY >= effectiveNearBottomY &&
+                areaRatio >= kCriticalAreaRatio)) {
           distLevel = DistanceLevel.critical;
           distText = '< 1.5m';
-        } else if (bottomY >= effectiveNearBottomY || areaRatio >= kNearAreaRatio) {
+        } else if (bottomY >= effectiveNearBottomY ||
+            areaRatio >= kNearAreaRatio) {
           distLevel = DistanceLevel.near;
           distText = '1.5m - 3.0m';
         } else {
@@ -394,23 +414,26 @@ class SpatialAnalyzer {
         track.consecutiveApproachingFrames = 0;
       }
 
-      results.add(DetectionResult(
-        id: track.id,
-        label: label,
-        vietnameseLabel: raw['vietnameseLabel'] ?? raw['vietnameseClass'] ?? label,
-        category: category,
-        score: (raw['score'] as num).toDouble(),
-        bbox: bbox,
-        centerX: cx,
-        bottomY: bottomY,
-        areaRatio: areaRatio,
-        direction: direction,
-        panValue: panValue.clamp(-1.0, 1.0),
-        distanceLevel: distLevel,
-        approximateDistanceMeters: distText,
-        isApproaching: isApproaching,
-        growthRate: growthRate,
-      ));
+      results.add(
+        DetectionResult(
+          id: track.id,
+          label: label,
+          vietnameseLabel:
+              raw['vietnameseLabel'] ?? raw['vietnameseClass'] ?? label,
+          category: category,
+          score: (raw['score'] as num).toDouble(),
+          bbox: bbox,
+          centerX: cx,
+          bottomY: bottomY,
+          areaRatio: areaRatio,
+          direction: direction,
+          panValue: panValue.clamp(-1.0, 1.0),
+          distanceLevel: distLevel,
+          approximateDistanceMeters: distText,
+          isApproaching: isApproaching,
+          growthRate: growthRate,
+        ),
+      );
     }
 
     _cleanupOldTracks(now);
@@ -418,7 +441,9 @@ class SpatialAnalyzer {
   }
 
   void _cleanupOldTracks(int now) {
-    _trackedObjects.removeWhere((t) => (now - t.lastTimeMs) > kTrackExpirationMs);
+    _trackedObjects.removeWhere(
+      (t) => (now - t.lastTimeMs) > kTrackExpirationMs,
+    );
   }
 
   void reset() {

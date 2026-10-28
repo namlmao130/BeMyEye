@@ -9,7 +9,10 @@ import 'package:be_my_eye_vn/ui/accessible_screen.dart';
 void main() {
   group('NV2 - DetectorService: Nạp nhãn, Class Mappings và Báo lỗi to', () {
     test('parseLabels phải phân tách chính xác danh sách 91 nhãn COCO SSD', () {
-      final sample91 = List.generate(91, (i) => i == 0 ? '???' : 'label_$i').join('\n');
+      final sample91 = List.generate(
+        91,
+        (i) => i == 0 ? '???' : 'label_$i',
+      ).join('\n');
       final labels = DetectorService.parseLabels(sample91);
       expect(labels.length, equals(91));
       expect(labels.first, equals('???'));
@@ -54,7 +57,9 @@ void main() {
       expect(mappings.length, equals(15));
     });
 
-    test('parsePredictions áp dụng confidenceThreshold thật sự và kLabelOffset = 1 (Lệch nhãn SSD)', () async {
+    test(
+        'parsePredictions áp dụng confidenceThreshold thật sự và kLabelOffset = 1 (Lệch nhãn SSD)',
+        () async {
       final detector = DetectorService(
         stringLoader: (_) async => List.generate(91, (i) {
           if (i == 1) return 'person';
@@ -62,7 +67,8 @@ void main() {
           if (i == 6) return 'bus';
           return '???';
         }).join('\n'),
-        interpreterCreator: (_, {options}) => Future.error(Exception('mock interpreter offline')),
+        interpreterCreator: (_, {options}) =>
+            Future.error(Exception('mock interpreter offline')),
       );
 
       await detector.loadModel();
@@ -95,22 +101,33 @@ void main() {
       expect(predictions[0]['category'], equals('vehicle'));
       expect(predictions[0]['priority'], equals(1));
       expect(predictions[0]['score'], equals(0.92));
-      expect(predictions[0]['bbox'], equals([300.0, 200.0, 600.0, 600.0]));
+      final motorcycleBox = predictions[0]['bbox'] as List<double>;
+      expect(motorcycleBox[0], closeTo(300.0, 1e-9));
+      expect(motorcycleBox[1], closeTo(200.0, 1e-9));
+      expect(motorcycleBox[2], closeTo(600.0, 1e-9));
+      expect(motorcycleBox[3], closeTo(600.0, 1e-9));
 
       expect(predictions[1]['class'], equals('person'));
       expect(predictions[1]['vietnameseClass'], equals('Người'));
       expect(predictions[1]['priority'], equals(4));
-      expect(predictions[1]['bbox'], equals([200.0, 100.0, 400.0, 400.0]));
+      final personBox = predictions[1]['bbox'] as List<double>;
+      expect(personBox[0], closeTo(200.0, 1e-9));
+      expect(personBox[1], closeTo(100.0, 1e-9));
+      expect(personBox[2], closeTo(400.0, 1e-9));
+      expect(personBox[3], closeTo(400.0, 1e-9));
     });
 
-    test('Kiểm tra biên kLabelOffset = 1: Bỏ qua chỉ số âm, vượt quá kích thước hoặc trúng ???', () async {
+    test(
+        'Kiểm tra biên kLabelOffset = 1: Bỏ qua chỉ số âm, vượt quá kích thước hoặc trúng ???',
+        () async {
       final detector = DetectorService(
         stringLoader: (_) async => List.generate(91, (i) {
           if (i == 1) return 'person';
           if (i == 6) return 'bus';
           return '???';
         }).join('\n'),
-        interpreterCreator: (_, {options}) => Future.error(Exception('mock interpreter offline')),
+        interpreterCreator: (_, {options}) =>
+            Future.error(Exception('mock interpreter offline')),
       );
 
       await detector.loadModel();
@@ -135,9 +152,12 @@ void main() {
       expect(predictions.first['vietnameseClass'], equals('Xe buýt'));
     });
 
-    test('Báo lỗi to: Khi không tìm thấy file mô hình hoặc nhãn, loadError phải được lưu và isReady == false', () async {
+    test(
+        'Báo lỗi to: Khi không tìm thấy file mô hình hoặc nhãn, loadError phải được lưu và isReady == false',
+        () async {
       final detector = DetectorService(
-        stringLoader: (_) => Future.error(Exception('File labelmap không tồn tại')),
+        stringLoader: (_) =>
+            Future.error(Exception('File labelmap không tồn tại')),
       );
 
       await detector.loadModel();
@@ -149,7 +169,9 @@ void main() {
       expect(detector.activeDelegate, equals('LỖI'));
     });
 
-    test('Báo lỗi to: Khi số lượng nhãn khác 91, loadError phải báo sai số lượng nhãn', () async {
+    test(
+        'Báo lỗi to: Khi số lượng nhãn khác 91, loadError phải báo sai số lượng nhãn',
+        () async {
       final detector = DetectorService(
         stringLoader: (_) async => 'person\ncar\nbicycle', // Chỉ có 3 nhãn
       );
@@ -161,10 +183,14 @@ void main() {
       expect(detector.activeDelegate, equals('LỖI'));
     });
 
-    test('Báo lỗi to: Khi nạp mô hình TFLite thất bại, tự động bắt lỗi và lưu loadError', () async {
+    test(
+        'Báo lỗi to: Khi nạp mô hình TFLite thất bại, tự động bắt lỗi và lưu loadError',
+        () async {
       final detector = DetectorService(
-        stringLoader: (_) async => List.generate(91, (i) => 'label_$i').join('\n'),
-        interpreterCreator: (_, {options}) => Future.error(Exception('Mô hình bị hỏng hoặc thiếu')),
+        stringLoader: (_) async =>
+            List.generate(91, (i) => 'label_$i').join('\n'),
+        interpreterCreator: (_, {options}) =>
+            Future.error(Exception('Mô hình bị hỏng hoặc thiếu')),
       );
 
       await detector.loadModel();
@@ -177,56 +203,65 @@ void main() {
   });
 
   group('NV2 - Giao diện AccessibleScreen: Khóa nút bấm khi mô hình lỗi', () {
-    testWidgets('Nút bắt đầu bị khóa và hiển thị cảnh báo lỗi khi detectorService có lỗi', (WidgetTester tester) async {
-      final audio = AudioHapticsService();
-      final alertEngine = AlertDecisionEngine(audio: audio);
-      final navService = NavigationService(audio: audio, alertEngine: alertEngine);
+    testWidgets(
+      'Nút bắt đầu bị khóa và hiển thị cảnh báo lỗi khi detectorService có lỗi',
+      (WidgetTester tester) async {
+        final audio = AudioHapticsService();
+        final alertEngine = AlertDecisionEngine(audio: audio);
+        final navService = NavigationService(
+          audio: audio,
+          alertEngine: alertEngine,
+        );
 
-      // Tạo detector với lỗi giả lập
-      final failingDetector = DetectorService(
-        stringLoader: (_) => Future.error(Exception('Xóa model giả lập')),
-      );
-      await failingDetector.loadModel();
+        // Tạo detector với lỗi giả lập
+        final failingDetector = DetectorService(
+          stringLoader: (_) => Future.error(Exception('Xóa model giả lập')),
+        );
+        await failingDetector.loadModel();
 
-      expect(failingDetector.isReady, isFalse);
-      expect(failingDetector.loadError, isNotNull);
+        expect(failingDetector.isReady, isFalse);
+        expect(failingDetector.loadError, isNotNull);
 
-      bool toggleCalled = false;
+        bool toggleCalled = false;
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: AccessibleScreen(
-            audio: audio,
-            alertEngine: alertEngine,
-            navService: navService,
-            detectorService: failingDetector,
-            isAppActive: false,
-            onToggleApp: () => toggleCalled = true,
+        await tester.pumpWidget(
+          MaterialApp(
+            home: AccessibleScreen(
+              audio: audio,
+              alertEngine: alertEngine,
+              navService: navService,
+              detectorService: failingDetector,
+              isAppActive: false,
+              onToggleApp: () => toggleCalled = true,
+            ),
           ),
-        ),
-      );
+        );
 
-      // Kiểm tra banner lỗi xuất hiện
-      expect(find.textContaining('LỖI MÔ HÌNH'), findsOneWidget);
-      expect(find.textContaining('Đừng dùng ứng dụng để dẫn đường'), findsWidgets);
+        // Kiểm tra banner lỗi xuất hiện
+        expect(find.textContaining('LỖI MÔ HÌNH'), findsOneWidget);
+        expect(
+          find.textContaining('Đừng dùng ứng dụng để dẫn đường'),
+          findsWidgets,
+        );
 
-      // Kiểm tra chữ trên nút bấm báo KHÓA DẪN ĐƯỜNG
-      expect(find.textContaining('KHÓA DẪN ĐƯỜNG'), findsOneWidget);
+        // Kiểm tra chữ trên nút bấm báo KHÓA DẪN ĐƯỜNG
+        expect(find.textContaining('KHÓA DẪN ĐƯỜNG'), findsOneWidget);
 
-      // Tìm nút bấm chính
-      final elevatedButtonFinder = find.byType(ElevatedButton).first;
-      final ElevatedButton button = tester.widget(elevatedButtonFinder);
+        // Tìm nút bấm chính
+        final elevatedButtonFinder = find.byType(ElevatedButton).first;
+        final ElevatedButton button = tester.widget(elevatedButtonFinder);
 
-      // Nút phải bị disabled (onPressed == null)
-      expect(button.onPressed, isNull);
+        // Nút phải bị disabled (onPressed == null)
+        expect(button.onPressed, isNull);
 
-      // Nhấn thử vào nút -> toggle không được gọi
-      await tester.tap(elevatedButtonFinder);
-      await tester.pump();
-      expect(toggleCalled, isFalse);
+        // Nhấn thử vào nút -> toggle không được gọi
+        await tester.tap(elevatedButtonFinder);
+        await tester.pump();
+        expect(toggleCalled, isFalse);
 
-      audio.dispose();
-      navService.dispose();
-    });
+        audio.dispose();
+        navService.dispose();
+      },
+    );
   });
 }

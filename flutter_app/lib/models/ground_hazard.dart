@@ -12,7 +12,8 @@ class GroundHazard {
   final double confidence;
   final DistanceLevel distanceLevel;
   final String distanceMeters;
-  final bool isNegativeObstacle; // Bậc bước xuống / lề đường tụt dốc (vật cản âm)
+  final bool
+      isNegativeObstacle; // Bậc bước xuống / lề đường tụt dốc (vật cản âm)
 
   GroundHazard({
     required this.type,

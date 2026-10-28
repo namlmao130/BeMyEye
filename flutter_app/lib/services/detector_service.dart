@@ -1,10 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
+
 import '../config/thresholds.dart';
 
 /// detector_service.dart
@@ -34,8 +33,14 @@ class DetectorService {
     1,
     (_) => List.generate(10, (_) => List.filled(4, 0.0)),
   );
-  final List<List<double>> _outputClasses = List.generate(1, (_) => List.filled(10, 0.0));
-  final List<List<double>> _outputScores = List.generate(1, (_) => List.filled(10, 0.0));
+  final List<List<double>> _outputClasses = List.generate(
+    1,
+    (_) => List.filled(10, 0.0),
+  );
+  final List<List<double>> _outputScores = List.generate(
+    1,
+    (_) => List.filled(10, 0.0),
+  );
   final List<double> _numDetections = List.filled(1, 0.0);
   late final Map<int, Object> _outputs = <int, Object>{
     0: _outputBoxes,
@@ -62,7 +67,11 @@ class DetectorService {
     'potted plant': {'vi': 'Chậu cây', 'category': 'obstacle', 'priority': 6},
     'fire hydrant': {'vi': 'Trụ nước', 'category': 'obstacle', 'priority': 5},
     'stop sign': {'vi': 'Biển báo', 'category': 'obstacle', 'priority': 5},
-    'traffic light': {'vi': 'Đèn giao thông', 'category': 'obstacle', 'priority': 6},
+    'traffic light': {
+      'vi': 'Đèn giao thông',
+      'category': 'obstacle',
+      'priority': 6,
+    },
     'umbrella': {'vi': 'Dù bạt che', 'category': 'obstacle', 'priority': 4},
 
     // Động vật
@@ -160,7 +169,10 @@ class DetectorService {
         final nnapiOptions = InterpreterOptions()
           ..threads = 2
           ..useNnApiForAndroid = true;
-        interpreter = await _interpreterCreator(modelPath, options: nnapiOptions);
+        interpreter = await _interpreterCreator(
+          modelPath,
+          options: nnapiOptions,
+        );
         selectedDelegate = 'NNAPI';
       } catch (e) {
         debugPrint('NNAPI không khả dụng, thử delegate tiếp theo: $e');
@@ -173,7 +185,10 @@ class DetectorService {
           final gpuOptions = InterpreterOptions()..threads = 2;
           try {
             gpuOptions.addDelegate(GpuDelegateV2());
-            interpreter = await _interpreterCreator(modelPath, options: gpuOptions);
+            interpreter = await _interpreterCreator(
+              modelPath,
+              options: gpuOptions,
+            );
             selectedDelegate = 'GPU';
           } catch (e) {
             debugPrint('GPU delegate Android không khả dụng: $e');
@@ -190,7 +205,10 @@ class DetectorService {
         try {
           final xnnOptions = InterpreterOptions()..threads = 2;
           xnnOptions.addDelegate(XNNPackDelegate());
-          interpreter = await _interpreterCreator(modelPath, options: xnnOptions);
+          interpreter = await _interpreterCreator(
+            modelPath,
+            options: xnnOptions,
+          );
           selectedDelegate = 'XNNPACK';
         } catch (e) {
           debugPrint('XNNPack không khả dụng, chuyển sang CPU: $e');
@@ -209,7 +227,10 @@ class DetectorService {
         try {
           final gpuOptions = InterpreterOptions()..threads = 2;
           gpuOptions.addDelegate(GpuDelegate());
-          interpreter = await _interpreterCreator(modelPath, options: gpuOptions);
+          interpreter = await _interpreterCreator(
+            modelPath,
+            options: gpuOptions,
+          );
           selectedDelegate = 'GPU';
         } catch (fallbackError) {
           debugPrint('GPU delegate iOS không khả dụng: $fallbackError');
@@ -278,7 +299,9 @@ class DetectorService {
       // Áp dụng kLabelOffset = 1 (NV12.1): Mô hình SSD MobileNet đánh số từ 0 (0: person)
       // trong khi labelmap.txt có dòng đầu tiên là "???" (index 0).
       final effectiveIndex = classIndex + kLabelOffset;
-      if (classIndex < 0 || effectiveIndex < 0 || effectiveIndex >= _labels.length) continue;
+      if (classIndex < 0 ||
+          effectiveIndex < 0 ||
+          effectiveIndex >= _labels.length) continue;
 
       final label = _labels[effectiveIndex].toLowerCase();
       if (label == '???' || label.isEmpty) continue;
@@ -305,12 +328,19 @@ class DetectorService {
         'category': mapping['category'],
         'priority': mapping['priority'],
         'score': score,
-        'bbox': [x, y, w, h], // Định dạng [x, y, width, height] pixel cho SpatialAnalyzer
+        'bbox': [
+          x,
+          y,
+          w,
+          h,
+        ], // Định dạng [x, y, width, height] pixel cho SpatialAnalyzer
       });
     }
 
     // Sắp xếp theo mức độ ưu tiên nguy hiểm (priority nhỏ hơn = nguy hiểm hơn)
-    results.sort((a, b) => (a['priority'] as int).compareTo(b['priority'] as int));
+    results.sort(
+      (a, b) => (a['priority'] as int).compareTo(b['priority'] as int),
+    );
     return results;
   }
 

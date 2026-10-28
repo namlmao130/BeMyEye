@@ -5,7 +5,9 @@ import 'package:be_my_eye_vn/services/alert_decision_engine.dart';
 import 'package:be_my_eye_vn/services/audio_haptics_service.dart';
 
 void main() {
-  group('NV12.5 - calculateThreatScore: ground_hazard trung bình không vượt xe/người ở mức near', () {
+  group(
+      'NV12.5 - calculateThreatScore: ground_hazard trung bình không vượt xe/người ở mức near',
+      () {
     late AudioHapticsService audio;
     late AlertDecisionEngine engine;
 
@@ -18,7 +20,9 @@ void main() {
       audio.dispose();
     });
 
-    test('calculateThreatScore: Xe ở mức near có điểm cao hơn ground_hazard độ tin cậy trung bình', () {
+    test(
+        'calculateThreatScore: Xe ở mức near có điểm cao hơn ground_hazard độ tin cậy trung bình',
+        () {
       final vehicleNear = AlertCandidate(
         id: 'car_1',
         label: 'car',
@@ -47,13 +51,19 @@ void main() {
 
       // Điểm xe: 40 (near) + 50 (center) + 35 (vehicle) = 125
       // Điểm bậc trung bình: 40 (near) + 50 (center) + 10 (medium bonus) = 100
-      expect(scoreGround, lessThan(scoreVehicle),
-          reason: 'Cảnh báo bậc độ tin cậy trung bình tuyệt đối không được vượt xe ở cự ly gần');
+      expect(
+        scoreGround,
+        lessThan(scoreVehicle),
+        reason:
+            'Cảnh báo bậc độ tin cậy trung bình tuyệt đối không được vượt xe ở cự ly gần',
+      );
       expect(scoreVehicle, equals(125));
       expect(scoreGround, equals(100));
     });
 
-    test('calculateThreatScore: Người ở mức near có điểm cao hơn ground_hazard độ tin cậy trung bình', () {
+    test(
+        'calculateThreatScore: Người ở mức near có điểm cao hơn ground_hazard độ tin cậy trung bình',
+        () {
       final pedestrianNear = AlertCandidate(
         id: 'person_1',
         label: 'person',
@@ -82,13 +92,19 @@ void main() {
 
       // Điểm người: 40 (near) + 50 (center) + 15 (pedestrian) = 105
       // Điểm bậc trung bình: 40 (near) + 50 (center) + 10 (medium bonus) = 100
-      expect(scoreGround, lessThan(scorePerson),
-          reason: 'Cảnh báo bậc độ tin cậy trung bình tuyệt đối không được vượt người ở cự ly gần');
+      expect(
+        scoreGround,
+        lessThan(scorePerson),
+        reason:
+            'Cảnh báo bậc độ tin cậy trung bình tuyệt đối không được vượt người ở cự ly gần',
+      );
       expect(scorePerson, equals(105));
       expect(scoreGround, equals(100));
     });
 
-    test('Engine.process: Khi đồng thời có Xe near và Bậc trung bình, Xe phải được chọn làm mối đe dọa chính', () {
+    test(
+        'Engine.process: Khi đồng thời có Xe near và Bậc trung bình, Xe phải được chọn làm mối đe dọa chính',
+        () {
       final vehicleObj = DetectionResult(
         id: 'track_car',
         label: 'car',
@@ -128,7 +144,9 @@ void main() {
       expect(threat.label, equals('car'));
     });
 
-    test('Engine.process: Khi đồng thời có Người near và Bậc trung bình, Người phải được chọn làm mối đe dọa chính', () {
+    test(
+        'Engine.process: Khi đồng thời có Người near và Bậc trung bình, Người phải được chọn làm mối đe dọa chính',
+        () {
       final personObj = DetectionResult(
         id: 'track_person',
         label: 'person',

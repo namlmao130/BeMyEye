@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:be_my_eye_vn/models/ground_hazard.dart';
 import 'package:be_my_eye_vn/models/detection_result.dart';
@@ -9,22 +10,27 @@ void main() {
     const int width = 160;
     const int height = 120;
 
-    test('Kiểm tra đầu vào nghiêm ngặt: Ném lỗi ArgumentError khi kích thước sai', () {
-      final analyzer = GroundPlaneAnalyzer();
-      final invalidBuffer = Uint8List(100); // Quá ngắn so với 160x120 = 19200
+    test(
+      'Kiểm tra đầu vào nghiêm ngặt: Ném lỗi ArgumentError khi kích thước sai',
+      () {
+        final analyzer = GroundPlaneAnalyzer();
+        final invalidBuffer = Uint8List(100); // Quá ngắn so với 160x120 = 19200
 
-      expect(
-        () => analyzer.analyzeLuminance(invalidBuffer, 160, 120),
-        throwsArgumentError,
-      );
+        expect(
+          () => analyzer.analyzeLuminance(invalidBuffer, 160, 120),
+          throwsArgumentError,
+        );
 
-      expect(
-        () => analyzer.analyzeLuminance(Uint8List(19200), -1, 120),
-        throwsArgumentError,
-      );
-    });
+        expect(
+          () => analyzer.analyzeLuminance(Uint8List(19200), -1, 120),
+          throwsArgumentError,
+        );
+      },
+    );
 
-    test('Loại bỏ vạch qua đường (Zebra Crosswalk) có nhiều đỉnh chu kỳ lặp lại', () {
+    test(
+        'Loại bỏ vạch qua đường (Zebra Crosswalk) có nhiều đỉnh chu kỳ lặp lại',
+        () {
       final analyzer = GroundPlaneAnalyzer();
 
       // Tạo khung hình mô phỏng vạch kẻ đi bộ qua đường:
@@ -47,7 +53,9 @@ void main() {
       expect(hazards, isEmpty);
     });
 
-    test('Loại bỏ các điểm ảnh cạnh ngang rời rạc không liên tục (Nhiễu mặt đường)', () {
+    test(
+        'Loại bỏ các điểm ảnh cạnh ngang rời rạc không liên tục (Nhiễu mặt đường)',
+        () {
       final analyzer = GroundPlaneAnalyzer();
 
       // Tạo frame có nhiều điểm cạnh ngang nhưng rải rác từng chấm 2-3 pixel,
@@ -64,11 +72,17 @@ void main() {
 
       for (int i = 0; i < 8; i++) {
         final hazards = analyzer.analyzeLuminance(noiseFrame, width, height);
-        expect(hazards, isEmpty, reason: 'Cạnh rời rạc không đủ liên tục không được coi là bậc thềm!');
+        expect(
+          hazards,
+          isEmpty,
+          reason: 'Cạnh rời rạc không đủ liên tục không được coi là bậc thềm!',
+        );
       }
     });
 
-    test('Nhận diện chính xác mép bậc thật LIÊN TỤC và nhất quán qua nhiều frame (Mức tin cậy cao)', () {
+    test(
+        'Nhận diện chính xác mép bậc thật LIÊN TỤC và nhất quán qua nhiều frame (Mức tin cậy cao)',
+        () {
       final analyzer = GroundPlaneAnalyzer();
 
       // Tạo frame có một mép bậc đi xuống thật sự:
@@ -100,7 +114,9 @@ void main() {
       expect(hazards.first.vietnameseName, contains('Bậc đi xuống'));
     });
 
-    test('Hạ mức cam kết khi độ tin cậy chưa cao (3-4 hits): Đổi thành câu nhắc dùng gậy kiểm tra, không rung critical', () {
+    test(
+        'Hạ mức cam kết khi độ tin cậy chưa cao (3-4 hits): Đổi thành câu nhắc dùng gậy kiểm tra, không rung critical',
+        () {
       final analyzer = GroundPlaneAnalyzer();
 
       final stepFrame = Uint8List(width * height);
@@ -117,8 +133,6 @@ void main() {
         }
       }
 
-      final emptyFrame = Uint8List(width * height)..fillRange(0, width * height, 120);
-
       // Cho xuất hiện 3 frame, sau đó xen kẽ frame trống để hitCount dừng ở mức 3
       analyzer.analyzeLuminance(stepFrame, width, height);
       analyzer.analyzeLuminance(stepFrame, width, height);
@@ -129,17 +143,33 @@ void main() {
 
       // Tiêu chí hạ mức cam kết:
       expect(h.vietnameseName, equals('Có thể có bậc, hãy dùng gậy kiểm tra'));
-      expect(h.isNegativeObstacle, isFalse); // Không dùng cờ negative obstacle để tránh rung khẩn cấp
-      expect(h.distanceLevel, equals(DistanceLevel.near)); // Không dùng critical
+      expect(
+        h.isNegativeObstacle,
+        isFalse,
+      ); // Không dùng cờ negative obstacle để tránh rung khẩn cấp
+      expect(
+        h.distanceLevel,
+        equals(DistanceLevel.near),
+      ); // Không dùng critical
     });
 
-    test('Công cụ đo kiểm: countFalseAlarmsPerMinute trên đường bằng đạt 0.0 cảnh báo nhầm/phút', () {
+    test(
+        'Công cụ đo kiểm: countFalseAlarmsPerMinute trên đường bằng đạt 0.0 cảnh báo nhầm/phút',
+        () {
       final analyzer = GroundPlaneAnalyzer();
 
       // Tạo chuỗi 100 frame đường bằng phẳng (mỗi frame 160x120 độ xám đồng nhất)
-      final flatRoadFrames = List.generate(100, (_) => Uint8List(width * height)..fillRange(0, width * height, 110));
+      final flatRoadFrames = List.generate(
+        100,
+        (_) => Uint8List(width * height)..fillRange(0, width * height, 110),
+      );
 
-      final falseAlarmsPerMin = analyzer.countFalseAlarmsPerMinute(flatRoadFrames, width, height, fps: 20);
+      final falseAlarmsPerMin = analyzer.countFalseAlarmsPerMinute(
+        flatRoadFrames,
+        width,
+        height,
+        fps: 20,
+      );
 
       // Đạt mục tiêu < 1 cảnh báo nhầm / phút trên đường bằng
       expect(falseAlarmsPerMin, equals(0.0));

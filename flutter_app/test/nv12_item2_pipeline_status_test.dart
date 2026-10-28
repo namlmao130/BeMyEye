@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:be_my_eye_vn/config/thresholds.dart';
 import 'package:be_my_eye_vn/services/camera_pipeline_service.dart';
@@ -40,14 +41,19 @@ class _AlwaysFailingDetector extends DetectorService {
 }
 
 void main() {
-  group('NV12.2 - Trạng thái PipelineStatus thực tế, Watchdog & Bỏ kPipelineEnabled', () {
-    test('PipelineStatus có đủ 4 trạng thái: demo, starting, running, failed', () {
-      expect(PipelineStatus.values.length, equals(4));
-      expect(PipelineStatus.values, contains(PipelineStatus.demo));
-      expect(PipelineStatus.values, contains(PipelineStatus.starting));
-      expect(PipelineStatus.values, contains(PipelineStatus.running));
-      expect(PipelineStatus.values, contains(PipelineStatus.failed));
-    });
+  group(
+      'NV12.2 - Trạng thái PipelineStatus thực tế, Watchdog & Bỏ kPipelineEnabled',
+      () {
+    test(
+      'PipelineStatus có đủ 4 trạng thái: demo, starting, running, failed',
+      () {
+        expect(PipelineStatus.values.length, equals(4));
+        expect(PipelineStatus.values, contains(PipelineStatus.demo));
+        expect(PipelineStatus.values, contains(PipelineStatus.starting));
+        expect(PipelineStatus.values, contains(PipelineStatus.running));
+        expect(PipelineStatus.values, contains(PipelineStatus.failed));
+      },
+    );
 
     test('Trạng thái khởi tạo ban đầu là demo', () {
       final audio = AudioHapticsService(customSpeaker: (t) async {});
@@ -65,11 +71,15 @@ void main() {
       audio.dispose();
     });
 
-    test('Chuyển sang running CHỈ KHI detector.isReady VÀ có khung hình trong 1.5 giây', () async {
+    test(
+        'Chuyển sang running CHỈ KHI detector.isReady VÀ có khung hình trong 1.5 giây',
+        () async {
       final spokenTexts = <String>[];
-      final audio = AudioHapticsService(customSpeaker: (t) async {
-        spokenTexts.add(t);
-      });
+      final audio = AudioHapticsService(
+        customSpeaker: (t) async {
+          spokenTexts.add(t);
+        },
+      );
       final alertEngine = AlertDecisionEngine(audio: audio);
 
       // 1. Khi detector CHƯA sẵn sàng (isReady == false)
@@ -94,8 +104,12 @@ void main() {
 
       await pipeline1.processSyntheticFrame(dummyFrame, customNow: 1000);
       // Chưa nạp model -> không được running
-      expect(pipeline1.status, isNot(equals(PipelineStatus.running)));
-      expect(spokenTexts, isEmpty, reason: 'Chưa running thì chưa được phát "Đã bật trợ lý dẫn đường"');
+      expect(pipeline1.status, equals(PipelineStatus.failed));
+      expect(
+        spokenTexts,
+        contains('Nhận diện chưa sẵn sàng, không thể dẫn đường'),
+        reason: 'Lỗi mô hình phải được thông báo rõ, không được im lặng',
+      );
 
       // 2. Khi detector ĐÃ sẵn sàng (isReady == true)
       final detectorReady = _ReadyDetector();
@@ -119,11 +133,15 @@ void main() {
       audio.dispose();
     });
 
-    test('Watchdog: Mất khung hình quá 1.5 giây thì chuyển sang failed và thông báo cảnh báo', () async {
+    test(
+        'Watchdog: Mất khung hình quá 1.5 giây thì chuyển sang failed và thông báo cảnh báo',
+        () async {
       final spokenTexts = <String>[];
-      final audio = AudioHapticsService(customSpeaker: (t) async {
-        spokenTexts.add(t);
-      });
+      final audio = AudioHapticsService(
+        customSpeaker: (t) async {
+          spokenTexts.add(t);
+        },
+      );
 
       final detector = _ReadyDetector();
 
@@ -161,67 +179,81 @@ void main() {
       // Gọi kiểm tra watchdog với mốc thời gian vượt 1.5s
       final now = 1000 + kWatchdogFrameTimeoutMs + 100;
       if (now - pipeline.lastFrameTimestamp > kWatchdogFrameTimeoutMs) {
-        pipeline.updateStatus(PipelineStatus.failed, reason: 'Quá 1.5s không có frame');
+        pipeline.updateStatus(
+          PipelineStatus.failed,
+          reason: 'Quá 1.5s không có frame',
+        );
       }
 
-      expect(pipeline.status, equals(PipelineStatus.failed));
-      expect(spokenTexts, contains('Mất tín hiệu camera, đừng dùng để dẫn đường'));
-
-      pipeline.dispose();
-      audio.dispose();
-    });
-
-    test('Watchdog: >= 5 lần suy luận lỗi liên tiếp thì chuyển sang failed', () async {
-      final spokenTexts = <String>[];
-      final audio = AudioHapticsService(customSpeaker: (t) async {
-        spokenTexts.add(t);
-      });
-
-      final detector = _AlwaysFailingDetector();
-
-      final pipeline = CameraPipelineService(
-        detectorService: detector,
-        spatialAnalyzer: SpatialAnalyzer(),
-        groundAnalyzer: GroundPlaneAnalyzer(),
-        alertEngine: AlertDecisionEngine(audio: audio),
-        batteryOptimizer: BatteryThermalOptimizer(),
-        csvLogger: CsvLogger(),
-      );
-
-      final dummyFrame = CameraFrameData(
-        yPlane: Uint8List(160 * 120),
-        yRowStride: 160,
-        yPixelStride: 1,
-        width: 160,
-        height: 120,
-        sensorOrientation: 90,
-      );
-
-      // Chạy qua pipeline thật để xác minh exception từ detector được đếm.
-      for (int i = 1; i <= kMaxConsecutiveInferenceErrors; i++) {
-        await pipeline.processSyntheticFrame(dummyFrame, customNow: i * 1000);
-        expect(pipeline.consecutiveInferenceErrors, equals(i));
-
-        if (i < kMaxConsecutiveInferenceErrors) {
-          expect(pipeline.status, equals(PipelineStatus.running));
-        } else {
-          expect(pipeline.status, equals(PipelineStatus.failed));
-        }
-      }
-
-      expect(pipeline.status, equals(PipelineStatus.failed));
-      expect(spokenTexts, contains('Mất tín hiệu camera, đừng dùng để dẫn đường'));
-
-      // Frame đến muộn không được tự đổi failed trở lại running.
-      await pipeline.processSyntheticFrame(dummyFrame, customNow: 9999);
       expect(pipeline.status, equals(PipelineStatus.failed));
       expect(
-        pipeline.consecutiveInferenceErrors,
-        equals(kMaxConsecutiveInferenceErrors),
+        spokenTexts,
+        contains('Mất tín hiệu camera, đừng dùng để dẫn đường'),
       );
 
       pipeline.dispose();
       audio.dispose();
     });
+
+    test(
+      'Watchdog: >= 5 lần suy luận lỗi liên tiếp thì chuyển sang failed',
+      () async {
+        final spokenTexts = <String>[];
+        final audio = AudioHapticsService(
+          customSpeaker: (t) async {
+            spokenTexts.add(t);
+          },
+        );
+
+        final detector = _AlwaysFailingDetector();
+
+        final pipeline = CameraPipelineService(
+          detectorService: detector,
+          spatialAnalyzer: SpatialAnalyzer(),
+          groundAnalyzer: GroundPlaneAnalyzer(),
+          alertEngine: AlertDecisionEngine(audio: audio),
+          batteryOptimizer: BatteryThermalOptimizer(),
+          csvLogger: CsvLogger(),
+        );
+
+        final dummyFrame = CameraFrameData(
+          yPlane: Uint8List(160 * 120),
+          yRowStride: 160,
+          yPixelStride: 1,
+          width: 160,
+          height: 120,
+          sensorOrientation: 90,
+        );
+
+        // Chạy qua pipeline thật để xác minh exception từ detector được đếm.
+        for (int i = 1; i <= kMaxConsecutiveInferenceErrors; i++) {
+          await pipeline.processSyntheticFrame(dummyFrame, customNow: i * 1000);
+          expect(pipeline.consecutiveInferenceErrors, equals(i));
+
+          if (i < kMaxConsecutiveInferenceErrors) {
+            expect(pipeline.status, equals(PipelineStatus.starting));
+          } else {
+            expect(pipeline.status, equals(PipelineStatus.failed));
+          }
+        }
+
+        expect(pipeline.status, equals(PipelineStatus.failed));
+        expect(
+          spokenTexts,
+          contains('Mất tín hiệu camera, đừng dùng để dẫn đường'),
+        );
+
+        // Frame đến muộn không được tự đổi failed trở lại running.
+        await pipeline.processSyntheticFrame(dummyFrame, customNow: 9999);
+        expect(pipeline.status, equals(PipelineStatus.failed));
+        expect(
+          pipeline.consecutiveInferenceErrors,
+          equals(kMaxConsecutiveInferenceErrors),
+        );
+
+        pipeline.dispose();
+        audio.dispose();
+      },
+    );
   });
 }

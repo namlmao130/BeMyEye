@@ -1,13 +1,15 @@
 import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:be_my_eye_vn/services/image_preprocessor.dart';
 import 'package:be_my_eye_vn/services/detector_service.dart';
 import 'package:be_my_eye_vn/services/battery_optimizer.dart';
-import 'package:be_my_eye_vn/config/thresholds.dart';
 
 void main() {
   group('Tối ưu hóa hiệu năng & FPS Pipeline (v1.2.1)', () {
-    test('preprocessCameraFrame: Sử dụng bộ đệm tái sử dụng (Zero Heap Allocation) và LUT mapping chính xác', () {
+    test(
+        'preprocessCameraFrame: Sử dụng bộ đệm tái sử dụng (Zero Heap Allocation) và LUT mapping chính xác',
+        () {
       const int w = 320;
       const int h = 240;
 
@@ -15,8 +17,10 @@ void main() {
       for (int i = 0; i < yPlane.length; i++) {
         yPlane[i] = (i * 7) % 256;
       }
-      final uPlane = Uint8List((w ~/ 2) * (h ~/ 2))..fillRange(0, (w ~/ 2) * (h ~/ 2), 128);
-      final vPlane = Uint8List((w ~/ 2) * (h ~/ 2))..fillRange(0, (w ~/ 2) * (h ~/ 2), 128);
+      final uPlane = Uint8List((w ~/ 2) * (h ~/ 2))
+        ..fillRange(0, (w ~/ 2) * (h ~/ 2), 128);
+      final vPlane = Uint8List((w ~/ 2) * (h ~/ 2))
+        ..fillRange(0, (w ~/ 2) * (h ~/ 2), 128);
 
       final frameData = CameraFrameData(
         yPlane: yPlane,
@@ -40,15 +44,25 @@ void main() {
         reusableLuma160: reusableLuma,
       );
 
-      expect(identical(result.rgb300, reusableRgb), isTrue,
-          reason: 'Bắt buộc phải tái sử dụng mảng bộ đệm RGB để triệt tiêu cấp phát heap');
-      expect(identical(result.luma160, reusableLuma), isTrue,
-          reason: 'Bắt buộc phải tái sử dụng mảng bộ đệm Luma để triệt tiêu cấp phát heap');
+      expect(
+        identical(result.rgb300, reusableRgb),
+        isTrue,
+        reason:
+            'Bắt buộc phải tái sử dụng mảng bộ đệm RGB để triệt tiêu cấp phát heap',
+      );
+      expect(
+        identical(result.luma160, reusableLuma),
+        isTrue,
+        reason:
+            'Bắt buộc phải tái sử dụng mảng bộ đệm Luma để triệt tiêu cấp phát heap',
+      );
       expect(result.rgb300.length, equals(270000));
       expect(result.luma160.length, equals(19200));
     });
 
-    test('preprocessCameraFrame: Xử lý đúng cho toàn bộ 4 góc xoay sensor (0, 90, 180, 270) với bảng LUT', () {
+    test(
+        'preprocessCameraFrame: Xử lý đúng cho toàn bộ 4 góc xoay sensor (0, 90, 180, 270) với bảng LUT',
+        () {
       const int w = 320;
       const int h = 240;
       final yPlane = Uint8List(w * h)..fillRange(0, w * h, 100);
@@ -72,7 +86,9 @@ void main() {
       }
     });
 
-    test('BatteryThermalOptimizer: Điều tiết tần suất quét mặt đất (~6.2 Hz, mỗi 160ms) tiết kiệm CPU', () {
+    test(
+        'BatteryThermalOptimizer: Điều tiết tần suất quét mặt đất (~6.2 Hz, mỗi 160ms) tiết kiệm CPU',
+        () {
       final optimizer = BatteryThermalOptimizer();
 
       // Khung hình tại t = 0 -> cho phép
@@ -88,25 +104,34 @@ void main() {
       expect(optimizer.shouldProcessGroundPlane(160), isTrue);
     });
 
-    test('DetectorService: parsePredictions chạy chuẩn xác với bộ đệm tái sử dụng', () {
-      final detector = DetectorService(
-        stringLoader: (_) async => List.generate(91, (i) => i == 1 ? 'person' : (i == 3 ? 'car' : '???')).join('\n'),
-      );
+    test(
+      'DetectorService: parsePredictions chạy chuẩn xác với bộ đệm tái sử dụng',
+      () async {
+        final detector = DetectorService(
+          stringLoader: (_) async => List.generate(
+            91,
+            (i) => i == 1 ? 'person' : (i == 3 ? 'car' : '???'),
+          ).join('\n'),
+          interpreterCreator: (_, {options}) =>
+              Future.error(StateError('Không cần interpreter trong unit test')),
+        );
+        await detector.loadModel();
 
-      final preds = detector.parsePredictions(
-        rawBoxes: [
-          [0.1, 0.1, 0.5, 0.5],
-        ],
-        rawClasses: [0.0], // class 0 + kLabelOffset 1 = 'person'
-        rawScores: [0.90],
-        count: 1,
-        imageWidth: 300,
-        imageHeight: 300,
-      );
+        final preds = detector.parsePredictions(
+          rawBoxes: [
+            [0.1, 0.1, 0.5, 0.5],
+          ],
+          rawClasses: [0.0], // class 0 + kLabelOffset 1 = 'person'
+          rawScores: [0.90],
+          count: 1,
+          imageWidth: 300,
+          imageHeight: 300,
+        );
 
-      expect(preds.length, equals(1));
-      expect(preds[0]['class'], equals('person'));
-      expect(preds[0]['vietnameseClass'], equals('Người'));
-    });
+        expect(preds.length, equals(1));
+        expect(preds[0]['class'], equals('person'));
+        expect(preds[0]['vietnameseClass'], equals('Người'));
+      },
+    );
   });
 }

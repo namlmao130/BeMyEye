@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_compass/flutter_compass.dart';
+
 import '../config/thresholds.dart';
 import '../models/waypoint.dart';
 import '../models/detection_result.dart';
@@ -49,6 +50,8 @@ class NavigationService {
   final AudioHapticsService audio;
   final AlertDecisionEngine alertEngine;
   final HttpGetClient? _httpGetClient;
+  final bool Function()? _isVisionReady;
+  final String _routeApiBase;
 
   StreamSubscription<Position>? _positionSub;
   StreamSubscription<CompassEvent>? _compassSub;
@@ -64,34 +67,44 @@ class NavigationService {
   int _currentWaypointIndex = 0;
   bool _isNavigating = false;
   bool _isSimulating = false;
+  bool _lastRouteUsedCache = false;
   Timer? _simTimer;
+  String? _lastRouteError;
 
   String _lastSpokenInstruction = '';
   int _lastInstructionTime = 0;
 
   // Tọa độ các điểm mốc kiểm thử định sẵn
   static const double hanoiStartLat = 21.028511;
-  static const double hanoiStartLng = 105.854167; // Hồ Hoàn Kiếm / Đinh Tiên Hoàng
+  static const double hanoiStartLng =
+      105.854167; // Hồ Hoàn Kiếm / Đinh Tiên Hoàng
   static const double hanoiDestLat = 21.024344;
-  static const double hanoiDestLng = 105.857644;  // Nhà Hát Lớn Hà Nội
+  static const double hanoiDestLng = 105.857644; // Nhà Hát Lớn Hà Nội
 
   static const double hcmcStartLat = 10.774431;
-  static const double hcmcStartLng = 106.702758;  // Phố đi bộ Nguyễn Huệ
+  static const double hcmcStartLng = 106.702758; // Phố đi bộ Nguyễn Huệ
   static const double hcmcDestLat = 10.772544;
-  static const double hcmcDestLng = 106.698022;   // Chợ Bến Thành
+  static const double hcmcDestLng = 106.698022; // Chợ Bến Thành
 
   NavigationService({
     required this.audio,
     required this.alertEngine,
     HttpGetClient? httpGetClient,
-  }) : _httpGetClient = httpGetClient {
-    _initCompass();
+    bool Function()? isVisionReady,
+    String? routeApiBase,
+    bool enableCompass = true,
+  })  : _httpGetClient = httpGetClient,
+        _isVisionReady = isVisionReady,
+        _routeApiBase = routeApiBase ?? kOsrmFootApiBase {
+    if (enableCompass) _initCompass();
   }
 
   List<Waypoint> get activeRoute => List.unmodifiable(_activeRoute);
   List<Waypoint> get cachedRoute => List.unmodifiable(_cachedRoute);
   double? get currentLatitude => _smoothedLat ?? _currentPosition?.latitude;
   double? get currentLongitude => _smoothedLng ?? _currentPosition?.longitude;
+  bool get lastRouteUsedCache => _lastRouteUsedCache;
+  String? get lastRouteError => _lastRouteError;
 
   void _initCompass() {
     _compassSub = FlutterCompass.events?.listen((event) {
@@ -111,29 +124,55 @@ class NavigationService {
     required double destLng,
     String? destName,
   }) async {
-    // Thứ tự kinh độ, vĩ độ chuẩn của OSRM: {lon1},{lat1};{lon2},{lat2}
-    final urlString = '$kOsrmFootApiBase/$startLng,$startLat;$destLng,$destLat?overview=full&steps=true&geometries=geojson';
-    final uri = Uri.parse(urlString);
+    _lastRouteError = null;
+    _lastRouteUsedCache = false;
+    final baseUrl = _routeApiBase.trim().replaceFirst(RegExp(r'/+$'), '');
+    if (baseUrl.isEmpty) {
+      _lastRouteError =
+          'Chưa cấu hình máy chủ dẫn đường đi bộ OSRM_FOOT_API_BASE';
+      debugPrint(_lastRouteError);
+      return _cachedRoute.isEmpty ? null : _useCachedRoute();
+    }
 
+    // Thứ tự kinh độ, vĩ độ chuẩn của OSRM: {lon1},{lat1};{lon2},{lat2}
+    final urlString = '$baseUrl/$startLng,$startLat;$destLng,$destLat'
+        '?overview=full&steps=true&geometries=geojson';
+    final uri = Uri.parse(urlString);
+    if (uri.scheme != 'https' || uri.host.isEmpty) {
+      _lastRouteError = 'Máy chủ dẫn đường phải dùng địa chỉ HTTPS hợp lệ';
+      debugPrint(_lastRouteError);
+      return _cachedRoute.isEmpty ? null : _useCachedRoute();
+    }
+
+    HttpClient? client;
     try {
       final String responseBody;
       final httpClientFn = _httpGetClient;
       if (httpClientFn != null) {
         responseBody = await httpClientFn(uri);
       } else {
-        final client = HttpClient();
-        client.connectionTimeout = Duration(milliseconds: kOsrmNetworkTimeoutMs);
-        final request = await client.getUrl(uri).timeout(Duration(milliseconds: kOsrmNetworkTimeoutMs));
-        final response = await request.close().timeout(Duration(milliseconds: kOsrmNetworkTimeoutMs));
+        client = HttpClient();
+        client.connectionTimeout = Duration(
+          milliseconds: kOsrmNetworkTimeoutMs,
+        );
+        final request = await client
+            .getUrl(uri)
+            .timeout(Duration(milliseconds: kOsrmNetworkTimeoutMs));
+        final response = await request.close().timeout(
+              Duration(milliseconds: kOsrmNetworkTimeoutMs),
+            );
         if (response.statusCode != HttpStatus.ok) {
-          throw HttpException('Lỗi HTTP ${response.statusCode} từ máy chủ OSRM');
+          throw HttpException(
+            'Lỗi HTTP ${response.statusCode} từ máy chủ OSRM',
+          );
         }
         responseBody = await response.transform(utf8.decoder).join();
-        client.close();
       }
 
       final Map<String, dynamic> json = jsonDecode(responseBody);
-      if (json['code'] != 'Ok' || json['routes'] == null || (json['routes'] as List).isEmpty) {
+      if (json['code'] != 'Ok' ||
+          json['routes'] == null ||
+          (json['routes'] as List).isEmpty) {
         throw Exception('OSRM không tìm được lộ trình đi bộ phù hợp');
       }
 
@@ -151,23 +190,35 @@ class NavigationService {
         final double stepLng = (loc[0] as num).toDouble();
         final double stepLat = (loc[1] as num).toDouble();
 
-        final String streetName = (step['name'] as String?)?.trim().isNotEmpty == true
-            ? (step['name'] as String).trim()
-            : (i == steps.length - 1 ? (destName ?? 'Điểm đích') : 'đoạn đường đi bộ');
+        final String streetName =
+            (step['name'] as String?)?.trim().isNotEmpty == true
+                ? (step['name'] as String).trim()
+                : (i == steps.length - 1
+                    ? (destName ?? 'Điểm đích')
+                    : 'đoạn đường đi bộ');
 
         final String type = maneuver['type'] ?? '';
         final String? modifier = maneuver['modifier'];
-        final double distanceMeters = (step['distance'] as num?)?.toDouble() ?? 0.0;
+        final double distanceMeters =
+            (step['distance'] as num?)?.toDouble() ?? 0.0;
 
-        final actionPair = _translateManeuverToVietnamese(type, modifier, streetName, distanceMeters, i == steps.length - 1);
+        final actionPair = _translateManeuverToVietnamese(
+          type,
+          modifier,
+          streetName,
+          distanceMeters,
+          i == steps.length - 1,
+        );
 
-        parsedWaypoints.add(Waypoint(
-          lat: stepLat,
-          lng: stepLng,
-          name: streetName,
-          instruction: actionPair.instruction,
-          actionText: actionPair.actionText,
-        ));
+        parsedWaypoints.add(
+          Waypoint(
+            lat: stepLat,
+            lng: stepLng,
+            name: streetName,
+            instruction: actionPair.instruction,
+            actionText: actionPair.actionText,
+          ),
+        );
       }
 
       if (parsedWaypoints.isNotEmpty) {
@@ -175,13 +226,21 @@ class NavigationService {
         return parsedWaypoints;
       }
     } catch (e) {
+      _lastRouteError = e.toString();
       debugPrint('Không thể tải lộ trình OSRM: $e');
       // Khi mất mạng hoặc timeout, kiểm tra bộ nhớ đệm
       if (_cachedRoute.isNotEmpty) {
-        return _cachedRoute;
+        return _useCachedRoute();
       }
+    } finally {
+      client?.close(force: true);
     }
     return null;
+  }
+
+  List<Waypoint> _useCachedRoute() {
+    _lastRouteUsedCache = true;
+    return _cachedRoute;
   }
 
   /// Bắt đầu dẫn đường đến điểm đích được chọn bằng tuyến OSRM thực
@@ -192,6 +251,14 @@ class NavigationService {
     double? fallbackStartLat,
     double? fallbackStartLng,
   }) async {
+    if (!(_isVisionReady?.call() ?? true)) {
+      audio.speakVietnamese(
+        'Hãy bật trợ lý nhận diện vật cản trước khi bắt đầu dẫn đường',
+        force: true,
+      );
+      return false;
+    }
+
     // 1. Kiểm tra vị trí hiện tại
     double? sLat = _smoothedLat ?? fallbackStartLat;
     double? sLng = _smoothedLng ?? fallbackStartLng;
@@ -199,7 +266,10 @@ class NavigationService {
     // Lấy vị trí GPS thật nếu có quyền
     try {
       final pos = await Geolocator.getCurrentPosition(
-        timeLimit: const Duration(seconds: 3),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 3),
+        ),
       );
       sLat = pos.latitude;
       sLng = pos.longitude;
@@ -214,14 +284,6 @@ class NavigationService {
       }
     }
 
-    if (sLat == null || sLng == null) {
-      audio.speakVietnamese(
-        'Không xác định được vị trí hiện tại, chưa thể bắt đầu dẫn đường',
-        force: true,
-      );
-      return false;
-    }
-
     // 2. Gọi OSRM lấy lộ trình đi bộ
     final route = await fetchOsrmRoute(
       startLat: sLat,
@@ -232,15 +294,17 @@ class NavigationService {
     );
 
     if (route == null || route.isEmpty) {
-      // Nguyên tắc NV11: Không có mạng, thông báo rõ ràng, KHÔNG để app treo!
+      final endpointMissing = _routeApiBase.trim().isEmpty;
       audio.speakVietnamese(
-        'Không có mạng, chỉ dùng được chế độ phát hiện vật cản',
+        endpointMissing
+            ? 'Chưa cấu hình máy chủ dẫn đường đi bộ. Chỉ dùng được chế độ phát hiện vật cản'
+            : 'Không có mạng, chỉ dùng được chế độ phát hiện vật cản',
         force: true,
       );
       return false;
     }
 
-    if (route == _cachedRoute && _cachedRoute.isNotEmpty) {
+    if (_lastRouteUsedCache) {
       audio.speakVietnamese(
         'Không có mạng, sử dụng lộ trình đã lưu trong bộ nhớ đệm',
         force: true,
@@ -252,21 +316,45 @@ class NavigationService {
 
   /// Khởi chạy dẫn đường Turn-by-turn với danh sách Waypoint
   Future<bool> startNavigation([List<Waypoint>? customRoute]) async {
+    if (!(_isVisionReady?.call() ?? true)) {
+      audio.speakVietnamese(
+        'Hãy bật trợ lý nhận diện vật cản trước khi bắt đầu dẫn đường',
+        force: true,
+      );
+      return false;
+    }
+
     _activeRoute = customRoute ?? _cachedRoute;
     if (_activeRoute.isEmpty) {
-      _activeRoute = _getDefaultSampleRoute();
+      audio.speakVietnamese(
+        'Chưa có lộ trình để bắt đầu dẫn đường',
+        force: true,
+      );
+      return false;
     }
     _currentWaypointIndex = 0;
     _isNavigating = true;
     _lastSpokenInstruction = '';
 
     try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        _isNavigating = false;
+        audio.speakVietnamese(
+          'GPS đang tắt. Hãy bật dịch vụ vị trí',
+          force: true,
+        );
+        return false;
+      }
       final permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         final requested = await Geolocator.requestPermission();
-        if (requested == LocationPermission.denied || requested == LocationPermission.deniedForever) {
+        if (requested == LocationPermission.denied ||
+            requested == LocationPermission.deniedForever) {
           _isNavigating = false;
-          audio.speakVietnamese('Chưa cấp quyền truy cập vị trí GPS', force: true);
+          audio.speakVietnamese(
+            'Chưa cấp quyền truy cập vị trí GPS',
+            force: true,
+          );
           return false;
         }
       }
@@ -276,9 +364,19 @@ class NavigationService {
         distanceFilter: 2,
       );
 
-      _positionSub = Geolocator.getPositionStream(locationSettings: locationSettings).listen((pos) {
-        _handleGPSUpdate(pos);
-      });
+      _positionSub =
+          Geolocator.getPositionStream(locationSettings: locationSettings)
+              .listen(
+        _handleGPSUpdate,
+        onError: (Object error) {
+          debugPrint('Luồng GPS gặp lỗi: $error');
+          stopNavigation(announce: false);
+          audio.speakVietnamese(
+            'Mất tín hiệu GPS. Đã dừng dẫn đường',
+            force: true,
+          );
+        },
+      );
     } catch (e) {
       debugPrint('Không thể khởi động luồng GPS: $e');
       _isNavigating = false;
@@ -289,7 +387,11 @@ class NavigationService {
       return false;
     }
 
-    audio.speakVietnamese('Bắt đầu lộ trình dẫn đường', force: true, priority: kGpsSpeechPriority);
+    audio.speakVietnamese(
+      'Bắt đầu lộ trình dẫn đường',
+      force: true,
+      priority: kGpsSpeechPriority,
+    );
     return true;
   }
 
@@ -301,11 +403,24 @@ class NavigationService {
       stopSimulation();
     }
     if (announce) {
-      audio.speakVietnamese('Đã kết thúc lộ trình', force: true, priority: kGpsSpeechPriority);
+      audio.speakVietnamese(
+        'Đã kết thúc lộ trình',
+        force: true,
+        priority: kGpsSpeechPriority,
+      );
     }
   }
 
   void _handleGPSUpdate(Position pos) {
+    final fixAge = DateTime.now().difference(pos.timestamp).inMilliseconds;
+    if (pos.accuracy > kGpsMaxAccuracyMeters ||
+        fixAge > kGpsMaxFixAgeMs ||
+        fixAge < -1000) {
+      debugPrint(
+        'Bỏ qua GPS kém tin cậy: accuracy=${pos.accuracy}, age=${fixAge}ms',
+      );
+      return;
+    }
     final rawLat = pos.latitude;
     final rawLng = pos.longitude;
     _gpsAccuracy = pos.accuracy.round();
@@ -325,7 +440,9 @@ class NavigationService {
   }
 
   void _evaluateNavigationStep() {
-    if (!_isNavigating || _smoothedLat == null || _currentWaypointIndex >= _activeRoute.length) {
+    if (!_isNavigating ||
+        _smoothedLat == null ||
+        _currentWaypointIndex >= _activeRoute.length) {
       return;
     }
 
@@ -333,14 +450,26 @@ class NavigationService {
     // CẢNH BÁO CAMERA NGẮT LẬP TỨC LỜI CHỈ ĐƯỜNG GPS, TUYỆT ĐỐI NHƯỜNG MICRO CHO AN TOÀN
     if (alertEngine.currentThreat != null) {
       final threat = alertEngine.currentThreat!;
-      if (threat.distanceLevel == DistanceLevel.critical || threat.isApproaching || threat.isNegativeObstacle) {
+      if (threat.distanceLevel == DistanceLevel.critical ||
+          threat.isApproaching ||
+          threat.isNegativeObstacle) {
         return;
       }
     }
 
     final target = _activeRoute[_currentWaypointIndex];
-    final double dist = _calculateDistance(_smoothedLat!, _smoothedLng!, target.lat, target.lng);
-    final double bearing = _calculateBearing(_smoothedLat!, _smoothedLng!, target.lat, target.lng);
+    final double dist = _calculateDistance(
+      _smoothedLat!,
+      _smoothedLng!,
+      target.lat,
+      target.lng,
+    );
+    final double bearing = _calculateBearing(
+      _smoothedLat!,
+      _smoothedLng!,
+      target.lat,
+      target.lng,
+    );
 
     // 1. Kiểm tra đã đến mốc chưa
     if (dist <= kGpsArrivalThresholdMeters) {
@@ -351,7 +480,10 @@ class NavigationService {
       } else {
         _currentWaypointIndex++;
         final next = _activeRoute[_currentWaypointIndex];
-        _speakNavigation('${target.actionText}. ${next.instruction}', force: true);
+        _speakNavigation(
+          '${target.actionText}. ${next.instruction}',
+          force: true,
+        );
         return;
       }
     }
@@ -367,7 +499,10 @@ class NavigationService {
         instruction = 'Chuẩn bị ${target.actionText} sau ${dist.round()} mét';
       }
 
-      final double headingDiff = _calculateAngleDiff(_compassHeading.toDouble(), bearing);
+      final double headingDiff = _calculateAngleDiff(
+        _compassHeading.toDouble(),
+        bearing,
+      );
       if (headingDiff.abs() > 45 && dist > 10) {
         if (headingDiff > 0) {
           instruction = 'Chếch sang phải. $instruction';
@@ -386,7 +521,9 @@ class NavigationService {
     // Kiểm tra an toàn: Nếu có nguy cơ va chạm camera thì ngắt ngay lập tức!
     if (alertEngine.currentThreat != null) {
       final threat = alertEngine.currentThreat!;
-      if (threat.distanceLevel == DistanceLevel.critical || threat.isApproaching || threat.isNegativeObstacle) {
+      if (threat.distanceLevel == DistanceLevel.critical ||
+          threat.isApproaching ||
+          threat.isNegativeObstacle) {
         return;
       }
     }
@@ -400,7 +537,8 @@ class NavigationService {
     stopNavigation();
     _isSimulating = true;
     _isNavigating = true;
-    _activeRoute = customRoute ?? (_cachedRoute.isNotEmpty ? _cachedRoute : _getDefaultSampleRoute());
+    _activeRoute = customRoute ??
+        (_cachedRoute.isNotEmpty ? _cachedRoute : _getDefaultSampleRoute());
     _currentWaypointIndex = 0;
 
     double simLat = _activeRoute[0].lat;
@@ -409,7 +547,11 @@ class NavigationService {
     _smoothedLng = simLng;
     _gpsAccuracy = 4;
 
-    audio.speakVietnamese('Bắt đầu mô phỏng đi bộ tuyến đường OSRM', force: true, priority: kGpsSpeechPriority);
+    audio.speakVietnamese(
+      'Bắt đầu mô phỏng đi bộ tuyến đường OSRM',
+      force: true,
+      priority: kGpsSpeechPriority,
+    );
 
     _simTimer = Timer.periodic(const Duration(milliseconds: 1500), (timer) {
       if (!_isSimulating || _currentWaypointIndex >= _activeRoute.length) {
@@ -418,7 +560,12 @@ class NavigationService {
       }
 
       final target = _activeRoute[_currentWaypointIndex];
-      final double dist = _calculateDistance(simLat, simLng, target.lat, target.lng);
+      final double dist = _calculateDistance(
+        simLat,
+        simLng,
+        target.lat,
+        target.lng,
+      );
 
       if (dist < 4.0) {
         if (_currentWaypointIndex < _activeRoute.length - 1) {
@@ -429,10 +576,16 @@ class NavigationService {
           return;
         }
       } else {
-        final double bearing = _calculateBearing(simLat, simLng, target.lat, target.lng);
+        final double bearing = _calculateBearing(
+          simLat,
+          simLng,
+          target.lat,
+          target.lng,
+        );
         const double moveDist = 2.0; // 2m mỗi chu kỳ
         final double dLat = (moveDist * cos(bearing * pi / 180)) / 111111;
-        final double dLng = (moveDist * sin(bearing * pi / 180)) / (111111 * cos(simLat * pi / 180));
+        final double dLng = (moveDist * sin(bearing * pi / 180)) /
+            (111111 * cos(simLat * pi / 180));
         simLat += dLat;
         simLng += dLng;
         _smoothedLat = simLat;
@@ -474,20 +627,41 @@ class NavigationService {
     if (type == 'turn') {
       switch (modifier) {
         case 'left':
-          return _ManeuverTranslation(instruction: 'Rẽ trái vào $streetName', actionText: 'Rẽ trái');
+          return _ManeuverTranslation(
+            instruction: 'Rẽ trái vào $streetName',
+            actionText: 'Rẽ trái',
+          );
         case 'right':
-          return _ManeuverTranslation(instruction: 'Rẽ phải vào $streetName', actionText: 'Rẽ phải');
+          return _ManeuverTranslation(
+            instruction: 'Rẽ phải vào $streetName',
+            actionText: 'Rẽ phải',
+          );
         case 'slight left':
-          return _ManeuverTranslation(instruction: 'Chếch sang trái vào $streetName', actionText: 'Chếch trái');
+          return _ManeuverTranslation(
+            instruction: 'Chếch sang trái vào $streetName',
+            actionText: 'Chếch trái',
+          );
         case 'slight right':
-          return _ManeuverTranslation(instruction: 'Chếch sang phải vào $streetName', actionText: 'Chếch phải');
+          return _ManeuverTranslation(
+            instruction: 'Chếch sang phải vào $streetName',
+            actionText: 'Chếch phải',
+          );
         case 'sharp left':
-          return _ManeuverTranslation(instruction: 'Ngoặt gấp sang trái vào $streetName', actionText: 'Ngoặt trái');
+          return _ManeuverTranslation(
+            instruction: 'Ngoặt gấp sang trái vào $streetName',
+            actionText: 'Ngoặt trái',
+          );
         case 'sharp right':
-          return _ManeuverTranslation(instruction: 'Ngoặt gấp sang phải vào $streetName', actionText: 'Ngoặt phải');
+          return _ManeuverTranslation(
+            instruction: 'Ngoặt gấp sang phải vào $streetName',
+            actionText: 'Ngoặt phải',
+          );
         case 'straight':
         default:
-          return _ManeuverTranslation(instruction: 'Đi thẳng trên $streetName', actionText: 'Đi thẳng');
+          return _ManeuverTranslation(
+            instruction: 'Đi thẳng trên $streetName',
+            actionText: 'Đi thẳng',
+          );
       }
     }
 
@@ -497,12 +671,20 @@ class NavigationService {
     );
   }
 
-  double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+  double _calculateDistance(
+    double lat1,
+    double lon1,
+    double lat2,
+    double lon2,
+  ) {
     const double r = 6371000;
     final double dLat = (lat2 - lat1) * pi / 180;
     final double dLon = (lon2 - lon1) * pi / 180;
     final double a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(lat1 * pi / 180) * cos(lat2 * pi / 180) * sin(dLon / 2) * sin(dLon / 2);
+        cos(lat1 * pi / 180) *
+            cos(lat2 * pi / 180) *
+            sin(dLon / 2) *
+            sin(dLon / 2);
     final double c = 2 * atan2(sqrt(a), sqrt(1 - a));
     return r * c;
   }
@@ -523,19 +705,50 @@ class NavigationService {
 
   List<Waypoint> _getDefaultSampleRoute() {
     return [
-      Waypoint(lat: hanoiStartLat, lng: hanoiStartLng, name: 'Vỉa hè Đinh Tiên Hoàng', instruction: 'Bắt đầu đi thẳng', actionText: 'Xuất phát'),
-      Waypoint(lat: 21.028850, lng: 105.854200, name: 'Phố Lò Sũ', instruction: 'Đi thẳng 38 mét', actionText: 'Rẽ phải vào phố Lò Sũ'),
-      Waypoint(lat: 21.028880, lng: 105.854700, name: 'Hẻm 12', instruction: 'Đi tiếp 45 mét', actionText: 'Rẽ trái vào Hẻm 12'),
-      Waypoint(lat: hanoiDestLat, lng: hanoiDestLng, name: 'Nhà Hát Lớn Hà Nội', instruction: 'Đi thẳng 42 mét nữa', actionText: 'Đích đến'),
+      Waypoint(
+        lat: hanoiStartLat,
+        lng: hanoiStartLng,
+        name: 'Vỉa hè Đinh Tiên Hoàng',
+        instruction: 'Bắt đầu đi thẳng',
+        actionText: 'Xuất phát',
+      ),
+      Waypoint(
+        lat: 21.028850,
+        lng: 105.854200,
+        name: 'Phố Lò Sũ',
+        instruction: 'Đi thẳng 38 mét',
+        actionText: 'Rẽ phải vào phố Lò Sũ',
+      ),
+      Waypoint(
+        lat: 21.028880,
+        lng: 105.854700,
+        name: 'Hẻm 12',
+        instruction: 'Đi tiếp 45 mét',
+        actionText: 'Rẽ trái vào Hẻm 12',
+      ),
+      Waypoint(
+        lat: hanoiDestLat,
+        lng: hanoiDestLng,
+        name: 'Nhà Hát Lớn Hà Nội',
+        instruction: 'Đi thẳng 42 mét nữa',
+        actionText: 'Đích đến',
+      ),
     ];
   }
 
   NavigationStatus getStatus() {
     int dist = 0;
     Waypoint? target;
-    if (_isNavigating && _smoothedLat != null && _currentWaypointIndex < _activeRoute.length) {
+    if (_isNavigating &&
+        _smoothedLat != null &&
+        _currentWaypointIndex < _activeRoute.length) {
       target = _activeRoute[_currentWaypointIndex];
-      dist = _calculateDistance(_smoothedLat!, _smoothedLng!, target.lat, target.lng).round();
+      dist = _calculateDistance(
+        _smoothedLat!,
+        _smoothedLng!,
+        target.lat,
+        target.lng,
+      ).round();
     }
     return NavigationStatus(
       isNavigating: _isNavigating,

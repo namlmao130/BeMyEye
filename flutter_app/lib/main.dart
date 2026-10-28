@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+
 import 'services/audio_haptics_service.dart';
 import 'services/alert_decision_engine.dart';
 import 'services/navigation_service.dart';
@@ -20,9 +21,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Khóa hướng dọc cho điện thoại gắn ngực
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-  ]);
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
   runApp(const BeMyEyeApp());
 }
@@ -89,7 +88,8 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> with WidgetsBindingObserver {
     if (!mounted || _isDisposed) return;
     final failed = _cameraPipeline.status == PipelineStatus.failed;
     setState(() {
-      _isAppActive = _cameraPipeline.status == PipelineStatus.running;
+      _isAppActive = _cameraPipeline.status == PipelineStatus.running ||
+          _cameraPipeline.status == PipelineStatus.starting;
     });
 
     if (failed) {
@@ -141,29 +141,28 @@ class _BeMyEyeAppState extends State<BeMyEyeApp> with WidgetsBindingObserver {
 
     setState(() => _isTransitioning = true);
     try {
-    if (_cameraPipeline.status != PipelineStatus.running &&
-        _cameraPipeline.status != PipelineStatus.starting) {
-      // Giữ màn hình luôn sáng bằng WakelockPlus khi dẫn đường
-      try {
-        await WakelockPlus.enable();
-      } catch (e) {
-        debugPrint('Không thể bật wakelock: $e');
-      }
+      if (_cameraPipeline.status != PipelineStatus.running &&
+          _cameraPipeline.status != PipelineStatus.starting) {
+        // Giữ màn hình luôn sáng bằng WakelockPlus khi dẫn đường
+        try {
+          await WakelockPlus.enable();
+        } catch (e) {
+          debugPrint('Không thể bật wakelock: $e');
+        }
 
-      // Kích hoạt luồng camera stream (chỉ nói "Đã bật trợ lý" khi thực sự running từ Pipeline)
-      await _cameraPipeline.startStream();
-    } else {
-      // Dừng stream camera và giải phóng wakelock
-      await _cameraPipeline.stopStream();
-      try {
-        await WakelockPlus.disable();
-      } catch (e) {
-        debugPrint('Không thể tắt wakelock: $e');
-      }
+        // Chỉ công bố sẵn sàng sau khung hình suy luận thành công đầu tiên.
+        await _cameraPipeline.startStream();
+      } else {
+        await _cameraPipeline.stopStream();
+        try {
+          await WakelockPlus.disable();
+        } catch (e) {
+          debugPrint('Không thể tắt wakelock: $e');
+        }
 
-      _audioService.speakVietnamese('Đã tạm dừng', force: true);
-      _navService.stopNavigation();
-    }
+        _audioService.speakVietnamese('Đã tạm dừng', force: true);
+        _navService.stopNavigation();
+      }
     } finally {
       if (mounted && !_isDisposed) setState(() => _isTransitioning = false);
     }

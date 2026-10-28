@@ -64,21 +64,35 @@ class _SamplingMap {
         yPixel = data.isBgra ? 4 : data.yPixelStride,
         uRow = data.uvRowStride > 0 ? data.uvRowStride : (data.width + 1) ~/ 2,
         uPixel = data.uvPixelStride,
-        vRow = data.vRowStride ?? (data.uvRowStride > 0 ? data.uvRowStride : (data.width + 1) ~/ 2),
+        vRow = data.vRowStride ??
+            (data.uvRowStride > 0 ? data.uvRowStride : (data.width + 1) ~/ 2),
         vPixel = data.vPixelStride ?? data.uvPixelStride {
     _fill(rgbY, 300, 300, chroma: true);
     _fill(lumaY, 160, 120, chroma: false);
   }
 
   bool matches(CameraFrameData data) =>
-      width == data.width && height == data.height && rotation == data.sensorOrientation &&
-      yRow == data.yRowStride && yPixel == (data.isBgra ? 4 : data.yPixelStride) &&
-      uRow == (data.uvRowStride > 0 ? data.uvRowStride : (data.width + 1) ~/ 2) &&
+      width == data.width &&
+      height == data.height &&
+      rotation == data.sensorOrientation &&
+      yRow == data.yRowStride &&
+      yPixel == (data.isBgra ? 4 : data.yPixelStride) &&
+      uRow ==
+          (data.uvRowStride > 0 ? data.uvRowStride : (data.width + 1) ~/ 2) &&
       uPixel == data.uvPixelStride &&
-      vRow == (data.vRowStride ?? (data.uvRowStride > 0 ? data.uvRowStride : (data.width + 1) ~/ 2)) &&
+      vRow ==
+          (data.vRowStride ??
+              (data.uvRowStride > 0
+                  ? data.uvRowStride
+                  : (data.width + 1) ~/ 2)) &&
       vPixel == (data.vPixelStride ?? data.uvPixelStride);
 
-  void _fill(Int32List destination, int outWidth, int outHeight, {required bool chroma}) {
+  void _fill(
+    Int32List destination,
+    int outWidth,
+    int outHeight, {
+    required bool chroma,
+  }) {
     var index = 0;
     for (var y = 0; y < outHeight; y++) {
       for (var x = 0; x < outWidth; x++) {
@@ -112,12 +126,24 @@ class _SamplingMap {
   }
 }
 
-void _validatePlane(Uint8List plane, int width, int height, int rowStride, int pixelStride,
-    {int bytesPerPixel = 1}) {
-  if (rowStride <= 0 || pixelStride <= 0 ||
+void _validatePlane(
+  Uint8List plane,
+  int width,
+  int height,
+  int rowStride,
+  int pixelStride, {
+  int bytesPerPixel = 1,
+}) {
+  if (rowStride <= 0 ||
+      pixelStride <= 0 ||
       rowStride < (width - 1) * pixelStride + bytesPerPixel ||
-      plane.length < (height - 1) * rowStride + (width - 1) * pixelStride + bytesPerPixel) {
-    throw ArgumentError('Camera plane bị thiếu dữ liệu hoặc stride không hợp lệ');
+      plane.length <
+          (height - 1) * rowStride +
+              (width - 1) * pixelStride +
+              bytesPerPixel) {
+    throw ArgumentError(
+      'Camera plane bị thiếu dữ liệu hoặc stride không hợp lệ',
+    );
   }
 }
 
@@ -129,7 +155,8 @@ PreprocessedFrame preprocessCameraFrame(
   Uint8List? reusableLuma160,
 }) {
   final stopwatch = Stopwatch()..start();
-  if (data.width <= 0 || data.height <= 0 ||
+  if (data.width <= 0 ||
+      data.height <= 0 ||
       !const [0, 90, 180, 270].contains(data.sensorOrientation)) {
     throw ArgumentError('Kích thước hoặc góc xoay camera không hợp lệ');
   }
@@ -137,10 +164,17 @@ PreprocessedFrame preprocessCameraFrame(
       (reusableLuma160 != null && reusableLuma160.length != 160 * 120)) {
     throw ArgumentError('Kích thước bộ đệm ảnh không hợp lệ');
   }
-  _validatePlane(data.yPlane, data.width, data.height, data.yRowStride,
-      data.isBgra ? 4 : data.yPixelStride, bytesPerPixel: data.isBgra ? 4 : 1);
+  _validatePlane(
+    data.yPlane,
+    data.width,
+    data.height,
+    data.yRowStride,
+    data.isBgra ? 4 : data.yPixelStride,
+    bytesPerPixel: data.isBgra ? 4 : 1,
+  );
   final hasChroma = data.uPlane != null || data.vPlane != null;
-  if (hasChroma && (data.isBgra || data.uPlane == null || data.vPlane == null)) {
+  if (hasChroma &&
+      (data.isBgra || data.uPlane == null || data.vPlane == null)) {
     throw ArgumentError('Camera YUV cần đủ cả hai plane U và V');
   }
   final uvWidth = (data.width + 1) ~/ 2;
@@ -148,8 +182,13 @@ PreprocessedFrame preprocessCameraFrame(
   final uvRow = data.uvRowStride > 0 ? data.uvRowStride : uvWidth;
   if (hasChroma) {
     _validatePlane(data.uPlane!, uvWidth, uvHeight, uvRow, data.uvPixelStride);
-    _validatePlane(data.vPlane!, uvWidth, uvHeight,
-        data.vRowStride ?? uvRow, data.vPixelStride ?? data.uvPixelStride);
+    _validatePlane(
+      data.vPlane!,
+      uvWidth,
+      uvHeight,
+      data.vRowStride ?? uvRow,
+      data.vPixelStride ?? data.uvPixelStride,
+    );
   }
   final map = _cachedMap != null && _cachedMap!.matches(data)
       ? _cachedMap!
@@ -167,7 +206,10 @@ PreprocessedFrame preprocessCameraFrame(
     }
     for (var i = 0; i < map.lumaY.length; i++) {
       final offset = map.lumaY[i];
-      luma[i] = (77 * input[offset + 2] + 150 * input[offset + 1] + 29 * input[offset]) >> 8;
+      luma[i] = (77 * input[offset + 2] +
+              150 * input[offset + 1] +
+              29 * input[offset]) >>
+          8;
     }
   } else {
     if (hasChroma) {
@@ -194,5 +236,9 @@ PreprocessedFrame preprocessCameraFrame(
     }
   }
   stopwatch.stop();
-  return PreprocessedFrame(rgb300: rgb, luma160: luma, preprocessDurationMs: stopwatch.elapsedMilliseconds);
+  return PreprocessedFrame(
+    rgb300: rgb,
+    luma160: luma,
+    preprocessDurationMs: stopwatch.elapsedMilliseconds,
+  );
 }

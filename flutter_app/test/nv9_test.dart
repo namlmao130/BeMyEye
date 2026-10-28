@@ -6,7 +6,9 @@ import 'package:be_my_eye_vn/config/thresholds.dart';
 
 void main() {
   group('NV9 - Điều tiết theo Pin và Nhiệt độ thực tế', () {
-    test('Phân biệt trạng thái bước đi vs đứng yên khi pin và nhiệt độ bình thường', () {
+    test(
+        'Phân biệt trạng thái bước đi vs đứng yên khi pin và nhiệt độ bình thường',
+        () {
       final optimizer = BatteryThermalOptimizer();
       optimizer.updateBatteryAndThermal(batteryLevel: 90, thermalStatus: 0);
 
@@ -25,7 +27,9 @@ void main() {
       expect(optimizer.minFrameIntervalMs, equals(1000 ~/ kFpsStanding));
     });
 
-    test('Khi Pin < 20%: Giảm FPS mục tiêu xuống 10 và giãn chu kỳ phân tích bậc thềm còn 1 lần/giây', () {
+    test(
+        'Khi Pin < 20%: Giảm FPS mục tiêu xuống 10 và giãn chu kỳ phân tích bậc thềm còn 1 lần/giây',
+        () {
       final optimizer = BatteryThermalOptimizer();
       optimizer.updateMovementState(1.2); // Đang bước đi
       expect(optimizer.targetFPS, equals(22));
@@ -44,7 +48,9 @@ void main() {
       expect(optimizer.shouldProcessGroundPlane(2000), isTrue);
     });
 
-    test('Khi Quá nhiệt (Thermal Throttling >= SEVERE): Giảm FPS xuống 8 và kích hoạt cảnh báo giọng nói', () {
+    test(
+        'Khi Quá nhiệt (Thermal Throttling >= SEVERE): Giảm FPS xuống 8 và kích hoạt cảnh báo giọng nói',
+        () {
       final optimizer = BatteryThermalOptimizer();
       optimizer.updateMovementState(1.2);
 
@@ -65,25 +71,28 @@ void main() {
       expect(optimizer.shouldAnnounceThermalWarning(17000), isTrue);
     });
 
-    test('Mức độ ưu tiên điều tiết: Quá nhiệt > Pin yếu > Trạng thái vận động', () {
-      final optimizer = BatteryThermalOptimizer();
+    test(
+      'Mức độ ưu tiên điều tiết: Quá nhiệt > Pin yếu > Trạng thái vận động',
+      () {
+        final optimizer = BatteryThermalOptimizer();
 
-      // Trường hợp 1: Vừa đi bộ (22fps), vừa pin yếu (10fps), vừa quá nhiệt (8fps)
-      // -> Phải chọn Quá nhiệt (8 FPS) để bảo vệ phần cứng máy
-      optimizer.updateMovementState(1.5);
-      optimizer.updateBatteryAndThermal(batteryLevel: 15, thermalStatus: 3);
-      expect(optimizer.targetFPS, equals(8));
+        // Trường hợp 1: Vừa đi bộ (22fps), vừa pin yếu (10fps), vừa quá nhiệt (8fps)
+        // -> Phải chọn Quá nhiệt (8 FPS) để bảo vệ phần cứng máy
+        optimizer.updateMovementState(1.5);
+        optimizer.updateBatteryAndThermal(batteryLevel: 15, thermalStatus: 3);
+        expect(optimizer.targetFPS, equals(8));
 
-      // Trường hợp 2: Hết quá nhiệt nhưng vẫn pin yếu
-      // -> Phải chọn Pin yếu (10 FPS)
-      optimizer.updateBatteryAndThermal(batteryLevel: 15, thermalStatus: 0);
-      expect(optimizer.targetFPS, equals(10));
+        // Trường hợp 2: Hết quá nhiệt nhưng vẫn pin yếu
+        // -> Phải chọn Pin yếu (10 FPS)
+        optimizer.updateBatteryAndThermal(batteryLevel: 15, thermalStatus: 0);
+        expect(optimizer.targetFPS, equals(10));
 
-      // Trường hợp 3: Sạc pin đầy (90%) và tiếp tục đi bộ
-      // -> Phục hồi về Walking (22 FPS)
-      optimizer.updateBatteryAndThermal(batteryLevel: 90, thermalStatus: 0);
-      expect(optimizer.targetFPS, equals(22));
-    });
+        // Trường hợp 3: Sạc pin đầy (90%) và tiếp tục đi bộ
+        // -> Phục hồi về Walking (22 FPS)
+        optimizer.updateBatteryAndThermal(batteryLevel: 90, thermalStatus: 0);
+        expect(optimizer.targetFPS, equals(22));
+      },
+    );
 
     test('DeviceHealthService đọc và phân loại nhãn nhiệt độ chính xác', () {
       final health = DeviceHealthService();
@@ -102,7 +111,9 @@ void main() {
       expect(health.thermalStatusText, contains('Nguy cấp'));
     });
 
-    test('CsvLogger ghi lại chính xác mức Pin và Trạng thái Nhiệt độ vào từng dòng CSV', () {
+    test(
+        'CsvLogger ghi lại chính xác mức Pin và Trạng thái Nhiệt độ vào từng dòng CSV',
+        () {
       final logger = CsvLogger()..isLoggingEnabled = true;
 
       logger.logFrame(
@@ -122,7 +133,10 @@ void main() {
 
       final csv = logger.exportCsv();
       expect(csv, contains('battery_level,thermal_status'));
-      expect(csv, contains('18.5,8,35,5,48,2,"Xe máy","center","< 1.5m","GPU",19,3'));
+      expect(
+        csv,
+        contains('18.5,8,35,5,48,2,"Xe máy","center","< 1.5m","GPU",19,3'),
+      );
     });
   });
 }

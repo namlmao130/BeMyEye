@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+
 import '../config/thresholds.dart';
 
 /// tilt_calibration_service.dart

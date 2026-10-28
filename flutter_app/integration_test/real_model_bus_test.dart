@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
@@ -7,7 +6,9 @@ import 'package:be_my_eye_vn/config/thresholds.dart';
 import 'package:be_my_eye_vn/services/detector_service.dart';
 
 void main() {
-  testWidgets('Integration Test: Mô hình SSD MobileNet thật nhận diện ảnh xe buýt (>=3 person, >=1 bus)', (WidgetTester tester) async {
+  testWidgets(
+      'Integration Test: Mô hình SSD MobileNet thật nhận diện ảnh xe buýt (>=3 person, >=1 bus)',
+      (WidgetTester tester) async {
     // 1. Nạp labelmap.txt thật từ assets
     final labelData = await rootBundle.loadString('assets/models/labelmap.txt');
     final labels = DetectorService.parseLabels(labelData);
@@ -17,7 +18,8 @@ void main() {
     expect(labels[6], equals('bus'));
 
     // 2. Khởi tạo Interpreter từ mô hình thật mobilenet_ssd.tflite
-    final interpreter = await Interpreter.fromAsset('assets/models/mobilenet_ssd.tflite');
+    final interpreter =
+        await Interpreter.fromAsset('assets/models/mobilenet_ssd.tflite');
     expect(interpreter, isNotNull);
 
     // 3. Chuẩn bị buffer đầu vào 300x300x3 uint8
@@ -26,7 +28,8 @@ void main() {
     expect(inputShape, equals([1, 300, 300, 3]));
 
     // Khởi tạo output tensors theo chuẩn SSD MobileNet
-    final outputBoxes = List.generate(1, (_) => List.generate(10, (_) => List.filled(4, 0.0)));
+    final outputBoxes =
+        List.generate(1, (_) => List.generate(10, (_) => List.filled(4, 0.0)));
     final outputClasses = List.generate(1, (_) => List.filled(10, 0.0));
     final outputScores = List.generate(1, (_) => List.filled(10, 0.0));
     final numDetections = List.filled(1, 0.0);
@@ -86,8 +89,10 @@ void main() {
     }
 
     // Kỳ vọng tiêu chuẩn NV12.1: >= 3 person và >= 1 bus
-    expect(personCount, greaterThanOrEqualTo(3), reason: 'Kỳ vọng ít nhất 3 người đi bộ');
-    expect(busCount, greaterThanOrEqualTo(1), reason: 'Kỳ vọng ít nhất 1 xe buýt');
+    expect(personCount, greaterThanOrEqualTo(3),
+        reason: 'Kỳ vọng ít nhất 3 người đi bộ');
+    expect(busCount, greaterThanOrEqualTo(1),
+        reason: 'Kỳ vọng ít nhất 1 xe buýt');
     expect(kLabelOffset, equals(1));
 
     interpreter.close();

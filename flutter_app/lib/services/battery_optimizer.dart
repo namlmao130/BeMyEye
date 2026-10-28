@@ -30,7 +30,8 @@ class BatteryThermalOptimizer {
 
   int get batteryLevel => _batteryLevel;
   int get thermalStatus => _thermalStatus;
-  bool get isLowBattery => _batteryLevel >= 0 && _batteryLevel < kLowBatteryPercent;
+  bool get isLowBattery =>
+      _batteryLevel >= 0 && _batteryLevel < kLowBatteryPercent;
   bool get isOverheated => _thermalStatus >= kThermalStatusSevere;
 
   /// Cập nhật vận tốc di chuyển từ GPS/Cảm biến
@@ -48,7 +49,10 @@ class BatteryThermalOptimizer {
   }
 
   /// Cập nhật tình trạng Pin và Nhiệt độ từ DeviceHealthService
-  void updateBatteryAndThermal({required int batteryLevel, required int thermalStatus}) {
+  void updateBatteryAndThermal({
+    required int batteryLevel,
+    required int thermalStatus,
+  }) {
     _batteryLevel = batteryLevel;
     _thermalStatus = thermalStatus;
     _recalculateTargetFPS();
@@ -72,7 +76,8 @@ class BatteryThermalOptimizer {
 
   /// Kiểm tra xem có nên xử lý khung hình Camera hiện tại hay bỏ qua (Frame-Dropping)
   bool shouldProcessFrame(int currentTimeMs) {
-    if (_lastExecutionTime == null || currentTimeMs - _lastExecutionTime! >= minFrameIntervalMs) {
+    if (_lastExecutionTime == null ||
+        currentTimeMs - _lastExecutionTime! >= minFrameIntervalMs) {
       _lastExecutionTime = currentTimeMs;
       return true;
     }
@@ -87,7 +92,8 @@ class BatteryThermalOptimizer {
         ? kGroundIntervalLowBatteryMs
         : kGroundIntervalNormalMs;
 
-    if (_lastGroundExecutionTime == null || currentTimeMs - _lastGroundExecutionTime! >= interval) {
+    if (_lastGroundExecutionTime == null ||
+        currentTimeMs - _lastGroundExecutionTime! >= interval) {
       _lastGroundExecutionTime = currentTimeMs;
       return true;
     }
@@ -98,7 +104,8 @@ class BatteryThermalOptimizer {
   bool shouldAnnounceThermalWarning(int currentTimeMs) {
     if (!isOverheated) return false;
 
-    if (_lastThermalWarningTime == null || currentTimeMs - _lastThermalWarningTime! >= kThermalWarningCooldownMs) {
+    if (_lastThermalWarningTime == null ||
+        currentTimeMs - _lastThermalWarningTime! >= kThermalWarningCooldownMs) {
       _lastThermalWarningTime = currentTimeMs;
       return true;
     }

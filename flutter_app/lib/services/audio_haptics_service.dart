@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:vibration/vibration.dart';
 import 'package:audioplayers/audioplayers.dart';
+
 import '../config/thresholds.dart';
 import '../models/detection_result.dart';
 
@@ -123,7 +124,6 @@ class AudioHapticsService {
             baseFreq = 1000.0;
             break;
           case DirectionZone.center:
-          default:
             soundAsset = 'sounds/beep_center.wav';
             baseFreq = 750.0;
             break;
@@ -157,31 +157,49 @@ class AudioHapticsService {
   }
 
   /// Quy trình kiểm tra tai nghe Trái / Giữa / Phải trước khi xuất phát
-  Future<void> runEarphoneCheckSequence({void Function(String step)? onStepChange}) async {
+  Future<void> runEarphoneCheckSequence({
+    void Function(String step)? onStepChange,
+  }) async {
     // 1. Kiểm tra tai trái
     onStepChange?.call('left');
     await speakVietnamese('Tai nghe bên trái', force: true, priority: 300);
     await Future.delayed(const Duration(milliseconds: 1000));
-    await playDirectionalBeep(pan: -1.0, pitch: 500, direction: DirectionZone.left);
+    await playDirectionalBeep(
+      pan: -1.0,
+      pitch: 500,
+      direction: DirectionZone.left,
+    );
 
     // 2. Kiểm tra tai giữa
     await Future.delayed(const Duration(milliseconds: 1200));
     onStepChange?.call('center');
     await speakVietnamese('Tai nghe ở giữa', force: true, priority: 300);
     await Future.delayed(const Duration(milliseconds: 1000));
-    await playDirectionalBeep(pan: 0.0, pitch: 750, direction: DirectionZone.center);
+    await playDirectionalBeep(
+      pan: 0.0,
+      pitch: 750,
+      direction: DirectionZone.center,
+    );
 
     // 3. Kiểm tra tai phải
     await Future.delayed(const Duration(milliseconds: 1200));
     onStepChange?.call('right');
     await speakVietnamese('Tai nghe bên phải', force: true, priority: 300);
     await Future.delayed(const Duration(milliseconds: 1000));
-    await playDirectionalBeep(pan: 1.0, pitch: 1000, direction: DirectionZone.right);
+    await playDirectionalBeep(
+      pan: 1.0,
+      pitch: 1000,
+      direction: DirectionZone.right,
+    );
 
     // 4. Kết thúc
     await Future.delayed(const Duration(milliseconds: 1200));
     onStepChange?.call('done');
-    await speakVietnamese('Hoàn tất kiểm tra tai nghe', force: true, priority: 300);
+    await speakVietnamese(
+      'Hoàn tất kiểm tra tai nghe',
+      force: true,
+      priority: 300,
+    );
   }
 
   /// Phát giọng nói tiếng Việt ngắn gọn (Có cơ chế ngắt câu cũ khi nguy cấp hơn)
@@ -193,15 +211,18 @@ class AudioHapticsService {
   }) async {
     if (_disposed) return;
     final int now = customNow ?? DateTime.now().millisecondsSinceEpoch;
-    final int elapsed = _lastSpeechTime == null ? kSpeechCooldownMs : now - _lastSpeechTime!;
+    final int elapsed =
+        _lastSpeechTime == null ? kSpeechCooldownMs : now - _lastSpeechTime!;
 
     if (elapsed < kSpeechCooldownMs) {
-      if (!force || priority < _currentSpeakingPriority + kSpeechInterruptPriorityDelta) {
+      if (!force &&
+          priority < _currentSpeakingPriority + kSpeechInterruptPriorityDelta) {
         return;
       }
     }
 
-    final interrupt = priority >= _currentSpeakingPriority + kSpeechInterruptPriorityDelta;
+    final interrupt = force ||
+        priority >= _currentSpeakingPriority + kSpeechInterruptPriorityDelta;
     final generation = ++_speechGeneration;
     // Reserve synchronously so two callers cannot both pass the cooldown gate.
     _lastSpeechTime = now;

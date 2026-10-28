@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+
 import '../config/thresholds.dart';
 
 /// device_health_service.dart
@@ -9,16 +10,19 @@ import '../config/thresholds.dart';
 /// Kết nối với Android PowerManager (Thermal Status API) và BatteryManager
 
 class DeviceHealthService {
-  static const MethodChannel _channel = MethodChannel('com.bemyeye/device_health');
+  static const MethodChannel _channel = MethodChannel(
+    'com.bemyeye/device_health',
+  );
 
   int _batteryLevel = 100; // Mặc định 100% nếu chưa đọc được
-  int _thermalStatus = 0;   // 0: THERMAL_STATUS_NONE
+  int _thermalStatus = 0; // 0: THERMAL_STATUS_NONE
   Timer? _pollingTimer;
 
   int get batteryLevel => _batteryLevel;
   int get thermalStatus => _thermalStatus;
 
-  bool get isLowBattery => _batteryLevel >= 0 && _batteryLevel < kLowBatteryPercent;
+  bool get isLowBattery =>
+      _batteryLevel >= 0 && _batteryLevel < kLowBatteryPercent;
   bool get isThermalThrottling => _thermalStatus >= kThermalStatusSevere;
 
   String get thermalStatusText {

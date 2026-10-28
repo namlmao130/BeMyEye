@@ -1,6 +1,6 @@
 import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
-import 'package:be_my_eye_vn/config/thresholds.dart';
 import 'package:be_my_eye_vn/services/image_preprocessor.dart';
 import 'package:be_my_eye_vn/services/csv_logger.dart';
 import 'package:be_my_eye_vn/services/battery_optimizer.dart';
@@ -11,9 +11,24 @@ import 'package:be_my_eye_vn/services/alert_decision_engine.dart';
 import 'package:be_my_eye_vn/services/audio_haptics_service.dart';
 import 'package:be_my_eye_vn/services/camera_pipeline_service.dart';
 
+class _ReadyEmptyDetector extends DetectorService {
+  @override
+  bool get isReady => true;
+
+  @override
+  List<Map<String, dynamic>> detectFromImage(
+    Uint8List imageBytes,
+    int width,
+    int height,
+  ) =>
+      const [];
+}
+
 void main() {
   group('NV3 - Tiền xử lý khung hình (Image Preprocessor) trong Isolate', () {
-    test('preprocessCameraFrame chuyển đổi chính xác kích thước RGB 300x300 và Luma 160x120', () {
+    test(
+        'preprocessCameraFrame chuyển đổi chính xác kích thước RGB 300x300 và Luma 160x120',
+        () {
       const srcW = 640;
       const srcH = 480;
 
@@ -45,7 +60,10 @@ void main() {
       final preprocessed = preprocessCameraFrame(frameData);
 
       // 1. Kiểm tra kích thước tensor đầu ra cho SSD MobileNet
-      expect(preprocessed.rgb300.length, equals(300 * 300 * 3)); // 270,000 bytes
+      expect(
+        preprocessed.rgb300.length,
+        equals(300 * 300 * 3),
+      ); // 270,000 bytes
 
       // 2. Kiểm tra kích thước luma cho GroundPlaneAnalyzer
       expect(preprocessed.luma160.length, equals(160 * 120)); // 19,200 bytes
@@ -54,7 +72,9 @@ void main() {
       expect(preprocessed.preprocessDurationMs, greaterThanOrEqualTo(0));
     });
 
-    test('preprocessCameraFrame hỗ trợ đa dạng góc xoay sensor (0, 90, 180, 270 độ) an toàn', () {
+    test(
+        'preprocessCameraFrame hỗ trợ đa dạng góc xoay sensor (0, 90, 180, 270 độ) an toàn',
+        () {
       const srcW = 320;
       const srcH = 240;
       final yPlane = Uint8List(srcW * srcH);
@@ -98,9 +118,15 @@ void main() {
       final csv = logger.exportCsv();
 
       // Kiểm tra tiêu đề CSV
-      expect(csv, contains('timestamp,fps,latency_preprocess_ms,latency_inference_ms'));
+      expect(
+        csv,
+        contains('timestamp,fps,latency_preprocess_ms,latency_inference_ms'),
+      );
       // Kiểm tra nội dung dòng
-      expect(csv, contains('21.5,8,38,4,50,2,"Xe máy","center","< 1.5m","GPU"'));
+      expect(
+        csv,
+        contains('21.5,8,38,4,50,2,"Xe máy","center","< 1.5m","GPU"'),
+      );
 
       logger.clear();
       expect(logger.rowCount, equals(0));
@@ -109,7 +135,7 @@ void main() {
 
   group('NV3 - Chuỗi Pipeline Camera & Tích hợp cảnh báo', () {
     test('PipelineStatus ban đầu ở trạng thái demo', () {
-      final audio = AudioHapticsService();
+      final audio = AudioHapticsService(customSpeaker: (_) async {});
       final pipeline = CameraPipelineService(
         detectorService: DetectorService(),
         spatialAnalyzer: SpatialAnalyzer(),
@@ -123,23 +149,18 @@ void main() {
       audio.dispose();
     });
 
-    test('CameraPipelineService xử lý khung hình giả lập tuần tự qua toàn bộ pipeline', () async {
-      final audio = AudioHapticsService();
+    test(
+        'CameraPipelineService xử lý khung hình giả lập tuần tự qua toàn bộ pipeline',
+        () async {
+      final audio = AudioHapticsService(customSpeaker: (_) async {});
       final alertEngine = AlertDecisionEngine(audio: audio);
       final spatialAnalyzer = SpatialAnalyzer();
       final groundAnalyzer = GroundPlaneAnalyzer();
       final batteryOptimizer = BatteryThermalOptimizer();
       final csvLogger = CsvLogger();
 
-      // Nạp nhãn giả lập 91 lớp cho DetectorService
-      final detector = DetectorService(
-        stringLoader: (_) async => List.generate(91, (i) {
-          if (i == 4) return 'motorcycle';
-          return '???';
-        }).join('\n'),
-        interpreterCreator: (_, {options}) => Future.error(Exception('mock interpreter')),
-      );
-      await detector.loadModel();
+      final detector = _ReadyEmptyDetector();
+      csvLogger.isLoggingEnabled = true;
 
       final pipeline = CameraPipelineService(
         detectorService: detector,

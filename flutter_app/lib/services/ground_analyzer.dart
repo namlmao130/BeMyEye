@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+
 import '../config/thresholds.dart';
 import '../models/detection_result.dart';
 import '../models/ground_hazard.dart';
@@ -15,7 +16,11 @@ import '../models/ground_hazard.dart';
 class GroundPlaneAnalyzer {
   final List<List<GroundHazard>> _history = [];
 
-  List<GroundHazard> analyzeLuminance(Uint8List grayBytes, int width, int height) {
+  List<GroundHazard> analyzeLuminance(
+    Uint8List grayBytes,
+    int width,
+    int height,
+  ) {
     // 1. Kiểm tra kích thước đầu vào nghiêm ngặt, tôn trọng width/height thực tế
     if (width <= 0 || height <= 0 || grayBytes.length < width * height) {
       throw ArgumentError(
@@ -49,9 +54,12 @@ class GroundPlaneAnalyzer {
       for (int x = margin; x < width - margin; x++) {
         final int idx = y * width + x;
 
-        final int gy =
-            -grayBytes[idx - width - 1] - 2 * grayBytes[idx - width] - grayBytes[idx - width + 1] +
-             grayBytes[idx + width - 1] + 2 * grayBytes[idx + width] + grayBytes[idx + width + 1];
+        final int gy = -grayBytes[idx - width - 1] -
+            2 * grayBytes[idx - width] -
+            grayBytes[idx - width + 1] +
+            grayBytes[idx + width - 1] +
+            2 * grayBytes[idx + width] +
+            grayBytes[idx + width + 1];
 
         final int absGy = gy.abs();
         final bool isEdgePixel = (absGy > kEdgeThreshold * 4);
@@ -94,7 +102,9 @@ class GroundPlaneAnalyzer {
         int stepUpCount = 0;
         int validComparisons = 0;
 
-        for (int x = bestRunStartX; x < bestRunStartX + maxContinuousEdgeRun; x++) {
+        for (int x = bestRunStartX;
+            x < bestRunStartX + maxContinuousEdgeRun;
+            x++) {
           final int idxAbove = (y - checkRange) * width + x;
           final int idxBelow = (y + checkRange) * width + x;
 
@@ -110,7 +120,8 @@ class GroundPlaneAnalyzer {
         }
 
         if (validComparisons > 0) {
-          final int dominantCount = stepDownCount > stepUpCount ? stepDownCount : stepUpCount;
+          final int dominantCount =
+              stepDownCount > stepUpCount ? stepDownCount : stepUpCount;
           final double consistency = dominantCount / validComparisons;
 
           // Phải đạt ngưỡng nhất quán tối thiểu (tránh bóng đổ loang lổ)
@@ -126,22 +137,31 @@ class GroundPlaneAnalyzer {
     // 3. Tìm các đỉnh (Peaks) thể hiện mép bậc
     for (int y = startY + 2; y < endY - 2; y++) {
       if (rowEdgeStrength[y] > 180 &&
-          rowEdgeStrength[y] > rowEdgeStrength[y - 1] &&
+          rowEdgeStrength[y] >= rowEdgeStrength[y - 1] &&
           rowEdgeStrength[y] > rowEdgeStrength[y + 1]) {
-
         final double normalizedY = y / height;
         final bool isStepDown = rowIsStepDown[y];
         final double consistency = rowConsistency[y];
 
-        candidates.add(GroundHazard(
-          type: isStepDown ? GroundHazardType.stepDown : GroundHazardType.stepUp,
-          vietnameseName: isStepDown ? 'Bậc đi xuống / Mép lề' : 'Bậc tam cấp bước lên',
-          normalizedY: normalizedY,
-          confidence: (rowEdgeStrength[y] / 300.0 * consistency).clamp(0.0, 0.95),
-          distanceLevel: normalizedY >= 0.78 ? DistanceLevel.critical : DistanceLevel.near,
-          distanceMeters: normalizedY >= 0.78 ? '< 1.2m' : '1.5m - 2.5m',
-          isNegativeObstacle: isStepDown,
-        ));
+        candidates.add(
+          GroundHazard(
+            type: isStepDown
+                ? GroundHazardType.stepDown
+                : GroundHazardType.stepUp,
+            vietnameseName:
+                isStepDown ? 'Bậc đi xuống / Mép lề' : 'Bậc tam cấp bước lên',
+            normalizedY: normalizedY,
+            confidence: (rowEdgeStrength[y] / 300.0 * consistency).clamp(
+              0.0,
+              0.95,
+            ),
+            distanceLevel: normalizedY >= 0.78
+                ? DistanceLevel.critical
+                : DistanceLevel.near,
+            distanceMeters: normalizedY >= 0.78 ? '< 1.2m' : '1.5m - 2.5m',
+            isNegativeObstacle: isStepDown,
+          ),
+        );
 
         y += 6; // Bỏ qua vài dòng kế tiếp
       }
@@ -163,8 +183,10 @@ class GroundPlaneAnalyzer {
     for (final h in current) {
       int hitCount = 0;
       for (final pastList in _history) {
-        if (pastList.any((p) =>
-            (p.normalizedY - h.normalizedY).abs() < 0.08 && p.type == h.type)) {
+        if (pastList.any(
+          (p) =>
+              (p.normalizedY - h.normalizedY).abs() < 0.08 && p.type == h.type,
+        )) {
           hitCount++;
         }
       }
@@ -176,15 +198,19 @@ class GroundPlaneAnalyzer {
       // 2. MỨC TIN CẬY TRUNG BÌNH: Ổn định qua 3 hoặc 4/8 frames
       // HẠ MỨC CAM KẾT: Đổi thành câu nhắc dùng gậy kiểm tra, không dùng rung critical
       else if (hitCount >= kGroundMediumConfidenceHits) {
-        confirmed.add(GroundHazard(
-          type: h.type,
-          vietnameseName: 'Có thể có bậc, hãy dùng gậy kiểm tra',
-          normalizedY: h.normalizedY,
-          confidence: (h.confidence * 0.7).clamp(0.0, 0.75),
-          distanceLevel: DistanceLevel.near, // Hạ cự ly xuống near, không dùng critical
-          distanceMeters: h.distanceMeters,
-          isNegativeObstacle: false, // Không đánh dấu negative obstacle để không kích hoạt rung/ngắt giọng khẩn cấp
-        ));
+        confirmed.add(
+          GroundHazard(
+            type: h.type,
+            vietnameseName: 'Có thể có bậc, hãy dùng gậy kiểm tra',
+            normalizedY: h.normalizedY,
+            confidence: (h.confidence * 0.7).clamp(0.0, 0.75),
+            distanceLevel:
+                DistanceLevel.near, // Hạ cự ly xuống near, không dùng critical
+            distanceMeters: h.distanceMeters,
+            isNegativeObstacle:
+                false, // Không đánh dấu negative obstacle để không kích hoạt rung/ngắt giọng khẩn cấp
+          ),
+        );
       }
     }
 
@@ -192,7 +218,12 @@ class GroundPlaneAnalyzer {
   }
 
   /// Công cụ đo đạc kiểm chuẩn: Đếm số cảnh báo nhầm mỗi phút trên chuỗi ảnh đường phẳng
-  double countFalseAlarmsPerMinute(List<Uint8List> sequence, int width, int height, {int fps = 20}) {
+  double countFalseAlarmsPerMinute(
+    List<Uint8List> sequence,
+    int width,
+    int height, {
+    int fps = 20,
+  }) {
     reset();
     int falseAlarmCount = 0;
 

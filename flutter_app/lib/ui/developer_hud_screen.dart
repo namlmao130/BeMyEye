@@ -1,13 +1,14 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../config/thresholds.dart';
-import '../../models/detection_result.dart';
-import '../../services/audio_haptics_service.dart';
-import '../../services/alert_decision_engine.dart';
-import '../../services/navigation_service.dart';
-import '../../services/detector_service.dart';
-import '../../services/camera_pipeline_service.dart';
+
+import '../config/thresholds.dart';
+import '../models/detection_result.dart';
+import '../services/audio_haptics_service.dart';
+import '../services/alert_decision_engine.dart';
+import '../services/navigation_service.dart';
+import '../services/detector_service.dart';
+import '../services/camera_pipeline_service.dart';
 
 /// developer_hud_screen.dart
 /// Màn hình kỹ thuật dành cho Nhà phát triển (Developer HUD)
@@ -93,7 +94,9 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                   det.activeDelegate,
                   det.activeDelegate == 'LỖI'
                       ? const Color(0xFFEF4444)
-                      : (det.activeDelegate == 'GPU' || det.activeDelegate == 'XNNPACK' || det.activeDelegate == 'NNAPI')
+                      : (det.activeDelegate == 'GPU' ||
+                              det.activeDelegate == 'XNNPACK' ||
+                              det.activeDelegate == 'NNAPI')
                           ? const Color(0xFF22C55E)
                           : const Color(0xFFFACC15),
                 ),
@@ -101,7 +104,9 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                 _buildHUDCard(
                   'Mô hình',
                   det.isReady ? '${det.labels.length} nhãn' : 'LỖI',
-                  det.isReady ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
+                  det.isReady
+                      ? const Color(0xFF22C55E)
+                      : const Color(0xFFEF4444),
                 ),
               ],
             ),
@@ -166,7 +171,10 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                       ? 'QUÁ NHIỆT'
                       : (pipeline?.batteryOptimizer.isLowBattery ?? false)
                           ? 'TIẾT KIỆM'
-                          : (pipeline?.batteryOptimizer.userMovementState == 'standing' ? 'ĐỨNG YÊN' : 'BƯỚC ĐI'),
+                          : (pipeline?.batteryOptimizer.userMovementState ==
+                                  'standing'
+                              ? 'ĐỨNG YÊN'
+                              : 'BƯỚC ĐI'),
                   (pipeline?.batteryOptimizer.isOverheated ?? false)
                       ? const Color(0xFFEF4444)
                       : (pipeline?.batteryOptimizer.isLowBattery ?? false)
@@ -190,15 +198,24 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                 children: [
                   Text(
                     'Tiền xử lý: ${pipeline?.latencyPreprocessMs ?? 0}ms',
-                    style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 12),
+                    style: const TextStyle(
+                      color: Color(0xFF38BDF8),
+                      fontSize: 12,
+                    ),
                   ),
                   Text(
                     'Suy luận AI: ${pipeline?.latencyInferenceMs ?? 0}ms',
-                    style: const TextStyle(color: Color(0xFF4ADE80), fontSize: 12),
+                    style: const TextStyle(
+                      color: Color(0xFF4ADE80),
+                      fontSize: 12,
+                    ),
                   ),
                   Text(
                     'Phân tích: ${pipeline?.latencyAnalysisMs ?? 0}ms',
-                    style: const TextStyle(color: Color(0xFFFACC15), fontSize: 12),
+                    style: const TextStyle(
+                      color: Color(0xFFFACC15),
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
@@ -228,19 +245,23 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                               ? 'Đang khởi động Camera...'
                               : 'Camera đang tắt\n(Nhấn "BẮT ĐẦU DẪN ĐƯỜNG" ở màn hình chính để kích hoạt luồng camera)',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.white54, fontSize: 13),
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
 
                     // Vẽ đường phân chia 3 hành lang (Trái 35% - Giữa 30% - Phải 35%)
-                    CustomPaint(
-                      painter: CorridorOverlayPainter(),
-                    ),
+                    CustomPaint(painter: CorridorOverlayPainter()),
 
                     // Vẽ các hộp nhận diện (Bounding Boxes) từ mô hình AI
-                    if (pipeline != null && pipeline.latestDetections.isNotEmpty)
+                    if (pipeline != null &&
+                        pipeline.latestDetections.isNotEmpty)
                       CustomPaint(
-                        painter: BoundingBoxPainter(detections: pipeline.latestDetections),
+                        painter: BoundingBoxPainter(
+                          detections: pipeline.latestDetections,
+                        ),
                       ),
                   ],
                 ),
@@ -254,11 +275,24 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                 title: 'Chi tiết thời gian xử lý (Latency Breakdown)',
                 child: Column(
                   children: [
-                    _buildLatencyRow('1. Tiền xử lý (YUV420 → RGB/Luma Isolate)', '${pipeline.latencyPreprocessMs} ms'),
-                    _buildLatencyRow('2. Suy luận TFLite SSD MobileNet on-device', '${pipeline.latencyInferenceMs} ms'),
-                    _buildLatencyRow('3. Phân tích Không gian & Bậc thềm', '${pipeline.latencyAnalysisMs} ms'),
+                    _buildLatencyRow(
+                      '1. Tiền xử lý (YUV420 → RGB/Luma Isolate)',
+                      '${pipeline.latencyPreprocessMs} ms',
+                    ),
+                    _buildLatencyRow(
+                      '2. Suy luận TFLite SSD MobileNet on-device',
+                      '${pipeline.latencyInferenceMs} ms',
+                    ),
+                    _buildLatencyRow(
+                      '3. Phân tích Không gian & Bậc thềm',
+                      '${pipeline.latencyAnalysisMs} ms',
+                    ),
                     const Divider(color: Color(0xFF333333)),
-                    _buildLatencyRow('Tổng độ trễ mỗi khung hình (End-to-End)', '${pipeline.latencyTotalMs} ms', isTotal: true),
+                    _buildLatencyRow(
+                      'Tổng độ trễ mỗi khung hình (End-to-End)',
+                      '${pipeline.latencyTotalMs} ms',
+                      isTotal: true,
+                    ),
                   ],
                 ),
               ),
@@ -280,13 +314,20 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                     child: const Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.info_outline, color: Color(0xFFF59E0B), size: 18),
+                        Icon(
+                          Icons.info_outline,
+                          color: Color(0xFFF59E0B),
+                          size: 18,
+                        ),
                         SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             'LƯU Ý TRUNG THỰC: Số liệu hiệu năng CẦN ĐO TRÊN MÁY THẬT. '
                             'Không khẳng định kết quả khi chưa có file log CSV thực địa.',
-                            style: TextStyle(color: Color(0xFFFDE68A), fontSize: 12),
+                            style: TextStyle(
+                              color: Color(0xFFFDE68A),
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                       ],
@@ -314,9 +355,10 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: (pipeline?.csvLogger.isBenchmarkRunning ?? false)
-                            ? const Color(0xFFDC2626)
-                            : const Color(0xFF059669),
+                        backgroundColor:
+                            (pipeline?.csvLogger.isBenchmarkRunning ?? false)
+                                ? const Color(0xFFDC2626)
+                                : const Color(0xFF059669),
                         padding: const EdgeInsets.symmetric(vertical: 11),
                       ),
                       icon: Icon(
@@ -337,7 +379,11 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                           pipeline.csvLogger.stopBenchmark();
                           setState(() {});
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Đã dừng phiên benchmark đo hiệu năng.')),
+                            const SnackBar(
+                              content: Text(
+                                'Đã dừng phiên benchmark đo hiệu năng.',
+                              ),
+                            ),
                           );
                         } else {
                           pipeline.csvLogger.startBenchmark(
@@ -347,7 +393,9 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                    content: Text('Đã hoàn thành benchmark 3 phút! Đã sao chép CSV vào bộ nhớ tạm.'),
+                                    content: Text(
+                                      'Đã hoàn thành benchmark 3 phút! Đã sao chép CSV vào bộ nhớ tạm.',
+                                    ),
                                     backgroundColor: Color(0xFF15803D),
                                     duration: Duration(seconds: 4),
                                   ),
@@ -372,9 +420,14 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                           icon: const Icon(Icons.copy, size: 18),
                           label: const Text('Sao chép CSV'),
                           onPressed: () {
-                            if (pipeline == null || pipeline.csvLogger.rowCount == 0) {
+                            if (pipeline == null ||
+                                pipeline.csvLogger.rowCount == 0) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Chưa có dữ liệu CSV nào được ghi!')),
+                                const SnackBar(
+                                  content: Text(
+                                    'Chưa có dữ liệu CSV nào được ghi!',
+                                  ),
+                                ),
                               );
                               return;
                             }
@@ -382,7 +435,9 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                             Clipboard.setData(ClipboardData(text: csvText));
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text('Đã sao chép ${pipeline.csvLogger.rowCount} dòng CSV vào bộ nhớ tạm để gửi lại!'),
+                                content: Text(
+                                  'Đã sao chép ${pipeline.csvLogger.rowCount} dòng CSV vào bộ nhớ tạm để gửi lại!',
+                                ),
                                 backgroundColor: const Color(0xFF15803D),
                               ),
                             );
@@ -399,7 +454,9 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                           pipeline?.csvLogger.clear();
                           setState(() {});
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Đã xóa bộ nhớ log CSV.')),
+                            const SnackBar(
+                              content: Text('Đã xóa bộ nhớ log CSV.'),
+                            ),
                           );
                         },
                         child: const Text('Xóa Log'),
@@ -420,7 +477,9 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                   Text(
                     'Trạng thái: ${det.isReady ? "Sẵn sàng hoạt động" : "Lỗi nạp mô hình"}',
                     style: TextStyle(
-                      color: det.isReady ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
+                      color: det.isReady
+                          ? const Color(0xFF22C55E)
+                          : const Color(0xFFEF4444),
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -428,7 +487,10 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                     const SizedBox(height: 4),
                     Text(
                       'Chi tiết lỗi: ${det.loadError}',
-                      style: const TextStyle(color: Color(0xFFEF4444), fontSize: 12),
+                      style: const TextStyle(
+                        color: Color(0xFFEF4444),
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                   const SizedBox(height: 6),
@@ -446,7 +508,10 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                     children: [
                       Text(
                         'Ngưỡng tin cậy (Confidence): ${(det.confidenceThreshold * 100).toInt()}%',
-                        style: const TextStyle(color: Color(0xFFFACC15), fontSize: 13),
+                        style: const TextStyle(
+                          color: Color(0xFFFACC15),
+                          fontSize: 13,
+                        ),
                       ),
                       Expanded(
                         child: Slider(
@@ -481,12 +546,19 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                     children: [
                       Text(
                         'Góc nghiêng ngực: ${(pipeline?.tiltService?.effectiveTiltDeg ?? 0.0).toStringAsFixed(1)}°',
-                        style: const TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13),
+                        style: const TextStyle(
+                          color: Color(0xFF38BDF8),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
                       ),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF0284C7),
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
                         ),
                         icon: const Icon(Icons.screen_rotation, size: 16),
                         label: const Text('Hiệu chuẩn góc 0°'),
@@ -494,7 +566,11 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                           pipeline?.tiltService?.calibrateNeutral();
                           setState(() {});
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Đã hiệu chuẩn góc đeo ngực hiện tại làm mốc 0°!')),
+                            const SnackBar(
+                              content: Text(
+                                'Đã hiệu chuẩn góc đeo ngực hiện tại làm mốc 0°!',
+                              ),
+                            ),
                           );
                         },
                       ),
@@ -505,7 +581,10 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                     children: [
                       Text(
                         'Chiều cao đeo: ${kDefaultMountHeightMeters.toStringAsFixed(2)}m',
-                        style: const TextStyle(color: Colors.white70, fontSize: 13),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                        ),
                       ),
                       Expanded(
                         child: Slider(
@@ -513,7 +592,8 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                           min: 1.10,
                           max: 1.85,
                           divisions: 15,
-                          label: '${kDefaultMountHeightMeters.toStringAsFixed(2)}m',
+                          label:
+                              '${kDefaultMountHeightMeters.toStringAsFixed(2)}m',
                           activeColor: const Color(0xFF38BDF8),
                           onChanged: (val) {
                             setState(() {
@@ -528,7 +608,10 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                     children: [
                       Text(
                         'Ngưỡng Nguy cấp: ${kCriticalBottomY.toStringAsFixed(2)}',
-                        style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13),
+                        style: const TextStyle(
+                          color: Color(0xFFEF4444),
+                          fontSize: 13,
+                        ),
                       ),
                       Expanded(
                         child: Slider(
@@ -570,12 +653,17 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                   Row(
                     children: [
                       ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFDC2626),
+                        ),
                         onPressed: () {
-                          pipeline?.healthService?.setMockHealth(batteryLevel: 15);
+                          pipeline?.healthService?.setMockHealth(
+                            batteryLevel: 15,
+                          );
                           pipeline?.batteryOptimizer.updateBatteryAndThermal(
                             batteryLevel: 15,
-                            thermalStatus: pipeline.batteryOptimizer.thermalStatus,
+                            thermalStatus:
+                                pipeline.batteryOptimizer.thermalStatus,
                           );
                           setState(() {});
                         },
@@ -583,12 +671,17 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF16A34A)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF16A34A),
+                        ),
                         onPressed: () {
-                          pipeline?.healthService?.setMockHealth(batteryLevel: 85);
+                          pipeline?.healthService?.setMockHealth(
+                            batteryLevel: 85,
+                          );
                           pipeline?.batteryOptimizer.updateBatteryAndThermal(
                             batteryLevel: 85,
-                            thermalStatus: pipeline.batteryOptimizer.thermalStatus,
+                            thermalStatus:
+                                pipeline.batteryOptimizer.thermalStatus,
                           );
                           setState(() {});
                         },
@@ -604,27 +697,45 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                   Row(
                     children: [
                       ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFDC2626),
+                        ),
                         onPressed: () {
-                          pipeline?.healthService?.setMockHealth(thermalStatus: 3);
+                          pipeline?.healthService?.setMockHealth(
+                            thermalStatus: 3,
+                          );
                           pipeline?.batteryOptimizer.updateBatteryAndThermal(
-                            batteryLevel: pipeline.batteryOptimizer.batteryLevel,
+                            batteryLevel:
+                                pipeline.batteryOptimizer.batteryLevel,
                             thermalStatus: 3,
                           );
                           setState(() {});
-                          if (pipeline?.batteryOptimizer.shouldAnnounceThermalWarning(DateTime.now().millisecondsSinceEpoch) == true) {
-                            widget.audio.speakVietnamese('Thiết bị quá nhiệt, giảm tốc độ xử lý', force: true, priority: 250);
+                          if (pipeline?.batteryOptimizer
+                                  .shouldAnnounceThermalWarning(
+                                DateTime.now().millisecondsSinceEpoch,
+                              ) ==
+                              true) {
+                            widget.audio.speakVietnamese(
+                              'Thiết bị quá nhiệt, giảm tốc độ xử lý',
+                              force: true,
+                              priority: 250,
+                            );
                           }
                         },
                         child: const Text('Quá nhiệt (Severe 3)'),
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0284C7)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0284C7),
+                        ),
                         onPressed: () {
-                          pipeline?.healthService?.setMockHealth(thermalStatus: 0);
+                          pipeline?.healthService?.setMockHealth(
+                            thermalStatus: 0,
+                          );
                           pipeline?.batteryOptimizer.updateBatteryAndThermal(
-                            batteryLevel: pipeline.batteryOptimizer.batteryLevel,
+                            batteryLevel:
+                                pipeline.batteryOptimizer.batteryLevel,
                             thermalStatus: 0,
                           );
                           setState(() {});
@@ -646,12 +757,18 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                 children: [
                   Text(
                     'Trạng thái: ${navStatus.isSimulating ? "Mô phỏng (Simulator)" : navStatus.isNavigating ? "Đang bật GPS thật" : "Chưa kích hoạt"}',
-                    style: const TextStyle(color: Color(0xFFFACC15), fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      color: Color(0xFFFACC15),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'Chỉ dẫn: ${navStatus.lastInstruction.isNotEmpty ? navStatus.lastInstruction : "--"}',
-                    style: const TextStyle(color: Color(0xFF22C55E), fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      color: Color(0xFF22C55E),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -663,7 +780,9 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                     children: [
                       Expanded(
                         child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1D4ED8)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1D4ED8),
+                          ),
                           onPressed: () => widget.navService.startNavigation(),
                           child: const Text('Bật GPS thật'),
                         ),
@@ -671,7 +790,9 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF047857)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF047857),
+                          ),
                           onPressed: () => widget.navService.startSimulation(),
                           child: const Text('Mô phỏng'),
                         ),
@@ -679,7 +800,9 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF333333)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF333333),
+                          ),
                           onPressed: () => widget.navService.stopNavigation(),
                           child: const Text('Dừng'),
                         ),
@@ -698,23 +821,33 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                         child: OutlinedButton(
                           onPressed: () async {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Đang tải tuyến đi bộ OSRM: Hồ Gươm -> Nhà Hát Lớn...')),
+                              const SnackBar(
+                                content: Text(
+                                  'Đang tải tuyến đi bộ OSRM: Hồ Gươm -> Nhà Hát Lớn...',
+                                ),
+                              ),
                             );
-                            final ok = await widget.navService.startNavigationToDestination(
+                            final ok = await widget.navService
+                                .startNavigationToDestination(
                               destLat: NavigationService.hanoiDestLat,
                               destLng: NavigationService.hanoiDestLng,
                               destName: 'Nhà Hát Lớn Hà Nội',
-                              fallbackStartLat: NavigationService.hanoiStartLat,
-                              fallbackStartLng: NavigationService.hanoiStartLng,
                             );
                             setState(() {});
                             if (ok && mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Đã nạp ${widget.navService.activeRoute.length} mốc OSRM Hà Nội!')),
+                                SnackBar(
+                                  content: Text(
+                                    'Đã nạp ${widget.navService.activeRoute.length} mốc OSRM Hà Nội!',
+                                  ),
+                                ),
                               );
                             }
                           },
-                          child: const Text('OSRM Hà Nội', style: TextStyle(fontSize: 12)),
+                          child: const Text(
+                            'OSRM Hà Nội',
+                            style: TextStyle(fontSize: 12),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -722,23 +855,33 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                         child: OutlinedButton(
                           onPressed: () async {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Đang tải tuyến đi bộ OSRM: Nguyễn Huệ -> Bến Thành...')),
+                              const SnackBar(
+                                content: Text(
+                                  'Đang tải tuyến đi bộ OSRM: Nguyễn Huệ -> Bến Thành...',
+                                ),
+                              ),
                             );
-                            final ok = await widget.navService.startNavigationToDestination(
+                            final ok = await widget.navService
+                                .startNavigationToDestination(
                               destLat: NavigationService.hcmcDestLat,
                               destLng: NavigationService.hcmcDestLng,
                               destName: 'Chợ Bến Thành',
-                              fallbackStartLat: NavigationService.hcmcStartLat,
-                              fallbackStartLng: NavigationService.hcmcStartLng,
                             );
                             setState(() {});
                             if (ok && mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Đã nạp ${widget.navService.activeRoute.length} mốc OSRM TP.HCM!')),
+                                SnackBar(
+                                  content: Text(
+                                    'Đã nạp ${widget.navService.activeRoute.length} mốc OSRM TP.HCM!',
+                                  ),
+                                ),
                               );
                             }
                           },
-                          child: const Text('OSRM TP.HCM', style: TextStyle(fontSize: 12)),
+                          child: const Text(
+                            'OSRM TP.HCM',
+                            style: TextStyle(fontSize: 12),
+                          ),
                         ),
                       ),
                     ],
@@ -763,7 +906,7 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                       ),
                       Switch(
                         value: widget.audio.isChannelsSwapped,
-                        activeColor: const Color(0xFF38BDF8),
+                        activeThumbColor: const Color(0xFF38BDF8),
                         onChanged: (val) {
                           setState(() {
                             widget.audio.isChannelsSwapped = val;
@@ -777,7 +920,10 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Text(
                         'File âm thanh vừa phát: ${widget.audio.lastPlayedAsset}',
-                        style: const TextStyle(color: Color(0xFFFACC15), fontSize: 11),
+                        style: const TextStyle(
+                          color: Color(0xFFFACC15),
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                   ElevatedButton.icon(
@@ -786,11 +932,17 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
                       minimumSize: const Size.fromHeight(40),
                     ),
                     icon: const Icon(Icons.headphones, size: 18),
-                    label: const Text('Quy trình Kiểm tra Tai nghe (L -> Center -> R)'),
+                    label: const Text(
+                      'Quy trình Kiểm tra Tai nghe (L -> Center -> R)',
+                    ),
                     onPressed: () {
                       widget.audio.runEarphoneCheckSequence();
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Đang phát chu kỳ kiểm tra tai nghe Trái/Giữa/Phải...')),
+                        const SnackBar(
+                          content: Text(
+                            'Đang phát chu kỳ kiểm tra tai nghe Trái/Giữa/Phải...',
+                          ),
+                        ),
                       );
                     },
                   ),
@@ -859,13 +1011,20 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
         ),
         child: Column(
           children: [
-            Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+            Text(
+              label,
+              style: const TextStyle(color: Colors.grey, fontSize: 10),
+            ),
             const SizedBox(height: 4),
             Text(
               value,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: valColor, fontSize: 13, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: valColor,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ],
         ),
@@ -912,7 +1071,14 @@ class _DeveloperHUDScreenState extends State<DeveloperHUDScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(color: Color(0xFFFACC15), fontWeight: FontWeight.bold, fontSize: 14)),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Color(0xFFFACC15),
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
           const SizedBox(height: 10),
           child,
         ],
@@ -926,12 +1092,20 @@ class CorridorOverlayPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withOpacity(0.3)
+      ..color = Colors.white.withValues(alpha: 0.3)
       ..strokeWidth = 1.5
       ..style = PaintingStyle.stroke;
 
-    canvas.drawLine(Offset(size.width * 0.35, 0), Offset(size.width * 0.35, size.height), paint);
-    canvas.drawLine(Offset(size.width * 0.65, 0), Offset(size.width * 0.65, size.height), paint);
+    canvas.drawLine(
+      Offset(size.width * 0.35, 0),
+      Offset(size.width * 0.35, size.height),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(size.width * 0.65, 0),
+      Offset(size.width * 0.65, size.height),
+      paint,
+    );
   }
 
   @override
@@ -977,7 +1151,7 @@ class BoundingBoxPainter extends CustomPainter {
         text: '${det.vietnameseLabel} (${(det.score * 100).toInt()}%)',
         style: TextStyle(
           color: Colors.white,
-          backgroundColor: boxColor.withOpacity(0.85),
+          backgroundColor: boxColor.withValues(alpha: 0.85),
           fontSize: 10,
           fontWeight: FontWeight.bold,
         ),

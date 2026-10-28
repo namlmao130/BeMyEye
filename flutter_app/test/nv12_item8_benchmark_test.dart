@@ -2,22 +2,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:be_my_eye_vn/services/csv_logger.dart';
 
 void main() {
-  group('NV12.8 - Đo hiệu năng: Chế độ chạy 3 phút xuất CSV & Yêu cầu đo trên máy thật', () {
-    test('Tiêu chí 1: Khởi động và theo dõi tiến trình Benchmark 180 giây (3 phút)', () {
+  group(
+      'NV12.8 - Đo hiệu năng: Chế độ chạy 3 phút xuất CSV & Yêu cầu đo trên máy thật',
+      () {
+    test(
+        'Tiêu chí 1: Khởi động và theo dõi tiến trình Benchmark 180 giây (3 phút)',
+        () {
       final logger = CsvLogger();
       expect(logger.isBenchmarkRunning, isFalse);
 
-      logger.startBenchmark(
-        durationSeconds: 180,
-        customNowMs: 10000,
-      );
+      logger.startBenchmark(durationSeconds: 180, customNowMs: 10000);
 
       expect(logger.isBenchmarkRunning, isTrue);
       expect(logger.benchmarkDurationSeconds, equals(180));
       expect(logger.benchmarkEntries, isEmpty);
     });
 
-    test('Tiêu chí 2: Thu thập FPS, độ trễ từng bước, delegate, nhiệt độ trong phiên đo', () {
+    test(
+        'Tiêu chí 2: Thu thập FPS, độ trễ từng bước, delegate, nhiệt độ trong phiên đo',
+        () {
       final logger = CsvLogger();
       logger.startBenchmark(durationSeconds: 180, customNowMs: 1000);
 
@@ -53,7 +56,9 @@ void main() {
       expect(stats['maxFps'], equals(20.0));
     });
 
-    test('Tiêu chí 3: Tự động hoàn thành sau khi đủ thời lượng và xuất CSV kèm Banner cảnh báo trung thực', () {
+    test(
+        'Tiêu chí 3: Tự động hoàn thành sau khi đủ thời lượng và xuất CSV kèm Banner cảnh báo trung thực',
+        () {
       final logger = CsvLogger();
       String? completedCsv;
 
@@ -116,7 +121,9 @@ void main() {
       expect(completedCsv, contains('CPU'));
     });
 
-    test('Tiêu chí 4: Hàm exportCsv thông thường cũng có banner nhắc nhở dữ liệu thực địa', () {
+    test(
+        'Tiêu chí 4: Hàm exportCsv thông thường cũng có banner nhắc nhở dữ liệu thực địa',
+        () {
       final logger = CsvLogger()..isLoggingEnabled = true;
       logger.logFrame(
         fps: 20.0,
@@ -136,7 +143,9 @@ void main() {
       expect(csv, contains('fps,latency_preprocess_ms'));
     });
 
-    test('Tiêu chí 5: Ở chế độ thường tắt hoàn toàn ghi CSV, chỉ ghi khi Benchmark hoạt động', () {
+    test(
+        'Tiêu chí 5: Ở chế độ thường tắt hoàn toàn ghi CSV, chỉ ghi khi Benchmark hoạt động',
+        () {
       final logger = CsvLogger();
       expect(logger.isLoggingEnabled, isFalse);
       expect(logger.isBenchmarkRunning, isFalse);
