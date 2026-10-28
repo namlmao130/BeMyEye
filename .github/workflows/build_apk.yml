@@ -4,10 +4,11 @@ on:
   pull_request:
   push:
     branches: [main, master]
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: flutter-${{ github.ref }}
@@ -37,6 +38,9 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Bootstrap Android platform files
+        run: python3 configure_android.py
+
       - name: Install dependencies
         run: flutter pub get
 
@@ -52,6 +56,11 @@ jobs:
       - name: Build debug APK
         run: flutter build apk --debug
 
+      - name: Prepare APK for Release
+        run: |
+          cp build/app/outputs/flutter-apk/app-debug.apk build/app/outputs/flutter-apk/BeMyEyes-VN-latest.apk
+          cp build/app/outputs/flutter-apk/app-debug.apk build/app/outputs/flutter-apk/BeMyEyes-VN-v1.2.2.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
@@ -59,3 +68,30 @@ jobs:
           path: flutter_app/build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Create GitHub Release with Direct Download
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.2.2
+          name: "Be My Eyes VN v1.2.2 (Bản cập nhật mới nhất)"
+          make_latest: true
+          body: |
+            ## 📱 Be My Eyes VN v1.2.2 - Bản cập nhật mới nhất
+            Ứng dụng dẫn đường thị giác thời gian thực on-device cho người khiếm thị tại Việt Nam.
+
+            ### 🚀 Các cải tiến chính:
+            - **Tối ưu hóa FPS & Tiền xử lý ảnh:** Áp dụng bảng tra cứu LUT YUV420 siêu tốc, giảm tải hoàn toàn GC churn.
+            - **Chế độ tiết kiệm hiệu năng:** Tắt ghi log CSV ở chế độ thường, chỉ kích hoạt khi bật Benchmark 3 phút.
+            - **Cân bằng điểm nguy hại (Threat Score):** Bậc bước xuống, hố ga và xe cộ đang lao tới được phân cấp ưu tiên an toàn chính xác.
+            - **Giao diện tiếp cận & Âm thanh:** Hỗ trợ TalkBack/VoiceOver, âm thanh không gian Stereo Panning và bộ lọc chống lặp giọng nói TTS tiếng Việt.
+
+            ### ⬇️ Tải file APK trực tiếp:
+            - **[Tải BeMyEyes-VN-latest.apk](https://github.com/namlmao130/BeMyEye/releases/download/v1.2.2/BeMyEyes-VN-latest.apk)**
+            - **[Tải BeMyEyes-VN-v1.2.2.apk](https://github.com/namlmao130/BeMyEye/releases/download/v1.2.2/BeMyEyes-VN-v1.2.2.apk)**
+          files: |
+            flutter_app/build/app/outputs/flutter-apk/BeMyEyes-VN-latest.apk
+            flutter_app/build/app/outputs/flutter-apk/BeMyEyes-VN-v1.2.2.apk
+            flutter_app/build/app/outputs/flutter-apk/app-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
